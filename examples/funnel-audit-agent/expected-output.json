@@ -1,0 +1,1 @@
+{"backend": "simple-jev", "model": "Qwen/Qwen3.5-0.8B", "calibrated": false, "note": "Expected output is a model judgment, not ground truth. Calibrated is false for Simple Jev."}

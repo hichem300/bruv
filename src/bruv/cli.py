@@ -22,6 +22,7 @@ from bruv.command_builders import (
 from bruv.config import BackendName, load_config
 from bruv.contracts import SCHEMAS
 from bruv.contracts import spec as build_spec
+from bruv.demos.funnel_audit import copy_demo_to, load_demo_request
 from bruv.domain.questions import ChoiceQuestion, JsonValue, NoulQuestion, ScoreQuestion
 from bruv.domain.requests import DecisionRequest
 from bruv.domain.results import DecisionResult
@@ -462,6 +463,34 @@ def doctor(
             if item.fix:
                 typer.echo(f"  fix: {item.fix}")
     raise typer.Exit(code=1 if any_failed else 0)
+
+
+@app.command("demo")
+def demo(
+    name: Annotated[str, typer.Argument(help="funnel-audit")],
+    execute: Annotated[bool, typer.Option("--execute", help="Run the real evaluation.")] = False,
+    copy_to: Annotated[Path | None, typer.Option("--copy-to")] = None,
+    backend: Annotated[str | None, typer.Option("--backend")] = None,
+    output: Annotated[str, typer.Option("--output")] = "human",
+    quiet: Annotated[bool, typer.Option("--quiet")] = False,
+    no_color: Annotated[bool, typer.Option("--no-color")] = False,
+    field: Annotated[str | None, typer.Option("--field")] = None,
+    fail_under: Annotated[float | None, typer.Option("--fail-under")] = None,
+    abstain_band: Annotated[str | None, typer.Option("--abstain-band")] = None,
+) -> None:
+    """Run a packaged demo. Defaults to a safe dry run with zero paid calls."""
+    if name != "funnel-audit":
+        typer.echo(f"error: unknown demo {name!r}; try 'funnel-audit'", err=True)
+        raise typer.Exit(code=2)
+    if copy_to is not None:
+        destination = copy_demo_to(copy_to)
+        typer.echo(f"copied: {destination}")
+        raise typer.Exit(code=0)
+    request = load_demo_request()
+    options = _options(
+        backend, None, output, quiet, no_color, not execute, field, fail_under, abstain_band
+    )
+    run_evaluation(options, request)
 
 
 def render_success_json(value: object) -> str:

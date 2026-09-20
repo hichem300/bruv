@@ -1,0 +1,33 @@
+state: |
+  Landing page for "Free Funnel Checklist" lead magnet.
+  Hero headline: "Get more leads." CTA button reads "Submit". No testimonials.
+  Form asks for name, email, phone, company, and budget. No proof of results.
+  Button below the fold on mobile.
+questions:
+  offer_understandable:
+    type: noul
+    instructions: Is the offer understandable from the hero alone?
+  cta_visible_specific:
+    type: noul
+    instructions: Is the call to action visible and specific?
+  proof_supports_claim:
+    type: noul
+    instructions: Does proof on the page support the main claim?
+  obvious_friction:
+    type: noul
+    instructions: Is there obvious conversion friction in the form?
+  highest_priority_leak:
+    type: choice
+    instructions: Which leak should be fixed first?
+    criteria:
+      missing_proof: No proof supports the claim.
+      long_form: Form asks for too many fields.
+      weak_cta: CTA is vague.
+      hidden_cta: CTA is below the fold on mobile.
+  severity:
+    type: score
+    instructions: How severe is the highest-priority leak?
+    criteria:
+      - low
+      - medium
+      - high
