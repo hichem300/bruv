@@ -5,7 +5,14 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from bruv.domain.questions import ChoiceQuestion, NoulQuestion, ScoreQuestion
+from bruv.domain.questions import (
+    MAX_JSON_DEPTH,
+    MAX_JSON_NODES,
+    ChoiceQuestion,
+    NoulQuestion,
+    ScoreQuestion,
+    ensure_json_compatible,
+)
 from bruv.domain.requests import DecisionRequest
 
 
@@ -181,4 +188,85 @@ def test_nonfinite_nested_question_criteria_is_rejected() -> None:
         ChoiceQuestion(
             instructions="Route?",
             criteria={"billing": {"weight": float("nan")}, "other": None},
+        )
+
+
+def test_request_and_question_values_are_deeply_immutable_snapshots() -> None:
+    source_state = {"ticket": {"messages": ["refund"]}}
+    source_criteria = {"billing": {"tags": ["paid"]}, "other": None}
+    request = DecisionRequest(
+        state=source_state,
+        questions={
+            "route": ChoiceQuestion(instructions="Route?", criteria=source_criteria),
+            "priority": ScoreQuestion(instructions="Priority?", criteria=["low", "high"]),
+        },
+    )
+
+    source_state["ticket"]["messages"].append("source mutation")
+    source_criteria["billing"]["tags"].append("source mutation")  # type: ignore[index]
+
+    assert request.state == {"ticket": {"messages": ["refund"]}}
+    assert request.questions["route"].criteria["billing"] == {"tags": ["paid"]}
+    assert isinstance(request.state, dict)
+    assert isinstance(request.questions["priority"].criteria, list)
+
+    with pytest.raises(ValidationError):
+        request.model = "changed"  # type: ignore[misc]
+    with pytest.raises(TypeError, match="immutable"):
+        request.state["ticket"]["messages"].append("changed")  # type: ignore[index, union-attr]
+    with pytest.raises(TypeError, match="immutable"):
+        request.questions.pop("route")
+    with pytest.raises(TypeError, match="immutable"):
+        request.questions["route"].criteria["billing"]["tags"].append("changed")  # type: ignore[index, union-attr]
+    with pytest.raises(TypeError, match="immutable"):
+        request.questions["priority"].criteria.append("critical")  # type: ignore[union-attr]
+
+    assert request.model_dump() == {
+        "state": {"ticket": {"messages": ["refund"]}},
+        "model": None,
+        "questions": {
+            "route": {
+                "type": "choice",
+                "instructions": "Route?",
+                "criteria": {"billing": {"tags": ["paid"]}, "other": None},
+            },
+            "priority": {
+                "type": "score",
+                "instructions": "Priority?",
+                "criteria": ["low", "high"],
+            },
+        },
+    }
+
+
+def test_excessive_json_depth_becomes_validation_error() -> None:
+    state: object = "leaf"
+    for _ in range(MAX_JSON_DEPTH + 1):
+        state = [state]
+
+    with pytest.raises(ValidationError, match="at most 64 levels deep"):
+        DecisionRequest(
+            state=state,  # type: ignore[arg-type]
+            questions={"route": NoulQuestion(instructions="Refund?")},
+        )
+
+
+def test_excessive_json_nodes_becomes_validation_error() -> None:
+    with pytest.raises(ValidationError, match="at most 10000 nodes"):
+        DecisionRequest(
+            state=[None] * MAX_JSON_NODES,
+            questions={"route": NoulQuestion(instructions="Refund?")},
+        )
+
+
+def test_cyclic_json_becomes_value_error_or_validation_error() -> None:
+    cyclic: list[object] = []
+    cyclic.append(cyclic)
+
+    with pytest.raises(ValueError, match="must not contain cycles"):
+        ensure_json_compatible(cyclic)
+    with pytest.raises(ValidationError, match="must not contain cycles"):
+        DecisionRequest(
+            state=cyclic,
+            questions={"route": NoulQuestion(instructions="Refund?")},
         )

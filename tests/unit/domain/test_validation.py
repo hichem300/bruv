@@ -132,3 +132,21 @@ def test_capabilities_and_validation_results_are_immutable() -> None:
         backend_capabilities.calibrated = True  # type: ignore[misc]
     with pytest.raises(FrozenInstanceError):
         result.valid = False  # type: ignore[misc]
+
+
+def test_request_mutation_cannot_bypass_backend_validation() -> None:
+    question = ScoreQuestion(
+        instructions="Score it",
+        criteria=[f"level-{index}" for index in range(11)],
+    )
+    request = request_with("ticket", question)
+
+    with pytest.raises(TypeError, match="immutable"):
+        question.criteria.pop()
+    with pytest.raises(TypeError, match="immutable"):
+        request.questions.pop("check")
+
+    result = validate_request(request, capabilities("typesafe"))
+
+    assert result.valid is False
+    assert [issue.code for issue in result.issues] == ["typesafe_score_level_limit"]

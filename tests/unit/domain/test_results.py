@@ -101,6 +101,53 @@ def test_choice_must_have_corresponding_probability() -> None:
         ChoiceAnswer(choice="billing", confidence=0.9, probabilities={"other": 1.0})
 
 
+@pytest.mark.parametrize("answer_type", ["choice", "score"])
+def test_probability_distributions_reject_materially_invalid_total(answer_type: str) -> None:
+    if answer_type == "choice":
+        with pytest.raises(ValidationError, match="must sum to 1 within 1e-05"):
+            ChoiceAnswer(
+                choice="billing",
+                confidence=0.8,
+                probabilities={"billing": 0.8, "other": 0.4},
+            )
+    else:
+        with pytest.raises(ValidationError, match="must sum to 1 within 1e-05"):
+            ScoreAnswer(
+                score=0.5,
+                confidence=0.8,
+                legend={"0": "low", "1": "high"},
+                probabilities={"0": 0.8, "1": 0.4},
+            )
+
+
+@pytest.mark.parametrize("answer_type", ["choice", "score"])
+def test_probability_distributions_accept_six_decimal_rounding(answer_type: str) -> None:
+    probabilities = {"0": 0.333333, "1": 0.333333, "2": 0.333333}
+
+    if answer_type == "choice":
+        answer = ChoiceAnswer(
+            choice="0",
+            confidence=0.5,
+            probabilities=probabilities,
+        )
+    else:
+        answer = ScoreAnswer(
+            score=1.0,
+            confidence=0.5,
+            legend={"0": "low", "1": "medium", "2": "high"},
+            probabilities=probabilities,
+        )
+
+    assert answer.probabilities == probabilities
+
+
+def test_empty_probability_distributions_are_rejected() -> None:
+    with pytest.raises(ValidationError):
+        ChoiceAnswer(choice="billing", confidence=0.5, probabilities={})
+    with pytest.raises(ValidationError):
+        ScoreAnswer(score=0.5, confidence=0.5, legend={}, probabilities={})
+
+
 def test_score_legend_and_probabilities_must_match() -> None:
     with pytest.raises(ValidationError):
         ScoreAnswer(
@@ -132,3 +179,38 @@ def test_latency_must_be_nonnegative_and_finite(latency: float) -> None:
             answers={},
             latency_ms=latency,
         )
+
+
+def test_result_values_are_deeply_immutable() -> None:
+    result = DecisionResult(
+        backend="typesafe",
+        model="jev-latest",
+        calibrated=True,
+        answers={
+            "route": ChoiceAnswer(
+                choice="billing",
+                confidence=0.9,
+                probabilities={"billing": 0.9, "other": 0.1},
+            ),
+            "score": ScoreAnswer(
+                score=0.8,
+                confidence=0.8,
+                legend={"0": {"tags": ["low"]}, "1": "high"},
+                probabilities={"0": 0.2, "1": 0.8},
+            ),
+        },
+        provider_metadata={"trace": {"steps": ["classify"]}},
+    )
+
+    with pytest.raises(ValidationError):
+        result.calibrated = False  # type: ignore[misc]
+    with pytest.raises(TypeError, match="immutable"):
+        result.answers.pop("route")
+    with pytest.raises(TypeError, match="immutable"):
+        result.answers["route"].probabilities["billing"] = 0.2  # type: ignore[union-attr]
+    with pytest.raises(TypeError, match="immutable"):
+        result.answers["score"].legend["0"]["tags"].append("changed")  # type: ignore[index, union-attr]
+    with pytest.raises(TypeError, match="immutable"):
+        result.provider_metadata["trace"]["steps"].append("changed")  # type: ignore[index, union-attr]
+
+    assert result.model_dump()["provider_metadata"] == {"trace": {"steps": ["classify"]}}

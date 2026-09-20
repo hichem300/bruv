@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Annotated, Any, Literal, TypeAlias
 
 from pydantic import Field, field_validator, model_validator
@@ -21,6 +22,24 @@ NonNegativeFiniteFloat: TypeAlias = Annotated[
 ]
 NonNegativeInt: TypeAlias = Annotated[int, Field(ge=0)]
 
+# Accommodates normal six-decimal provider rounding without accepting material drift.
+PROBABILITY_SUM_ABS_TOLERANCE = 1e-5
+
+
+def _validate_probability_distribution(probabilities: dict[str, float]) -> None:
+    if not probabilities:
+        raise ValueError("probability distribution must not be empty")
+    if not math.isclose(
+        math.fsum(probabilities.values()),
+        1.0,
+        rel_tol=0.0,
+        abs_tol=PROBABILITY_SUM_ABS_TOLERANCE,
+    ):
+        raise ValueError(
+            "probability distribution must sum to 1 "
+            f"within {PROBABILITY_SUM_ABS_TOLERANCE:g}"
+        )
+
 
 class NoulAnswer(CanonicalModel):
     type: Literal["noul"] = "noul"
@@ -37,9 +56,10 @@ class ChoiceAnswer(CanonicalModel):
     ]
 
     @model_validator(mode="after")
-    def selected_choice_has_probability(self) -> ChoiceAnswer:
+    def validate_probability_distribution(self) -> ChoiceAnswer:
         if self.choice not in self.probabilities:
             raise ValueError("choice must have a matching probability")
+        _validate_probability_distribution(self.probabilities)
         return self
 
 
@@ -59,9 +79,10 @@ class ScoreAnswer(CanonicalModel):
         return ensure_json_compatible(value)
 
     @model_validator(mode="after")
-    def legend_matches_probabilities(self) -> ScoreAnswer:
+    def validate_probability_distribution(self) -> ScoreAnswer:
         if self.legend.keys() != self.probabilities.keys():
             raise ValueError("legend and probabilities must have identical keys")
+        _validate_probability_distribution(self.probabilities)
         return self
 
 
