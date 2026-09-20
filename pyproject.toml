@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "bruv"
 version = "0.1.0"
 description = "no yap, only fax. Typed decisions from TypeSafe Jev or Simple Jev."
+readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 dependencies = [
