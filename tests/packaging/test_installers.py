@@ -8,10 +8,7 @@ atomic placement.
 from __future__ import annotations
 
 import hashlib
-import os
 import platform
-import shutil
-import stat
 import subprocess
 from pathlib import Path
 
