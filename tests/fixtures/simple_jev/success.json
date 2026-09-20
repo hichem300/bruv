@@ -1,0 +1,18 @@
+{
+  "model": "Qwen/Qwen3.5-0.8B",
+  "answers": {
+    "route": {
+      "type": "choice",
+      "choice": "billing",
+      "confidence": 0.9,
+      "probabilities": {
+        "billing": 0.9,
+        "other": 0.1
+      }
+    }
+  },
+  "usage": {
+    "input_tokens": 40,
+    "output_tokens": 0
+  }
+}
