@@ -20,6 +20,8 @@ def demo_root() -> Path:
     if env_path:
         candidates.append(Path(env_path))
     candidates.append(Path(__file__).resolve().parents[3] / DEMO_RELATIVE)
+    # Installed wheel: artifacts live at site-packages root (parents[2])
+    candidates.append(Path(__file__).resolve().parents[2] / DEMO_RELATIVE)
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         candidates.append(Path(meipass) / DEMO_RELATIVE)

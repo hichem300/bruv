@@ -35,6 +35,8 @@ def skill_source() -> Path:
         candidates.append(Path(env_path))
     # Editable/source layout: src/bruv/skills/installer.py -> repo root
     candidates.append(Path(__file__).resolve().parents[3] / SKILL_RELATIVE)
+    # Installed wheel: artifacts live at site-packages root (parents[2])
+    candidates.append(Path(__file__).resolve().parents[2] / SKILL_RELATIVE)
     # Standalone PyInstaller bundle
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
