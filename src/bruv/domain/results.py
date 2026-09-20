@@ -36,8 +36,7 @@ def _validate_probability_distribution(probabilities: dict[str, float]) -> None:
         abs_tol=PROBABILITY_SUM_ABS_TOLERANCE,
     ):
         raise ValueError(
-            "probability distribution must sum to 1 "
-            f"within {PROBABILITY_SUM_ABS_TOLERANCE:g}"
+            f"probability distribution must sum to 1 within {PROBABILITY_SUM_ABS_TOLERANCE:g}"
         )
 
 
