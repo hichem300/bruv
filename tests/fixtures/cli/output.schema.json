@@ -1,0 +1,250 @@
+{
+  "$defs": {
+    "ChoiceAnswer": {
+      "additionalProperties": false,
+      "properties": {
+        "choice": {
+          "title": "Choice",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "probabilities": {
+          "additionalProperties": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "minProperties": 1,
+          "title": "Probabilities",
+          "type": "object"
+        },
+        "type": {
+          "const": "choice",
+          "default": "choice",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "choice",
+        "confidence",
+        "probabilities"
+      ],
+      "title": "ChoiceAnswer",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "NoulAnswer": {
+      "additionalProperties": false,
+      "properties": {
+        "noul": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Noul",
+          "type": "number"
+        },
+        "type": {
+          "const": "noul",
+          "default": "noul",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "noul"
+      ],
+      "title": "NoulAnswer",
+      "type": "object"
+    },
+    "ScoreAnswer": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "legend": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "minProperties": 1,
+          "title": "Legend",
+          "type": "object"
+        },
+        "probabilities": {
+          "additionalProperties": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "type": "number"
+          },
+          "minProperties": 1,
+          "title": "Probabilities",
+          "type": "object"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        },
+        "type": {
+          "const": "score",
+          "default": "score",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "score",
+        "confidence",
+        "legend",
+        "probabilities"
+      ],
+      "title": "ScoreAnswer",
+      "type": "object"
+    },
+    "Usage": {
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Tokens"
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Tokens"
+        }
+      },
+      "title": "Usage",
+      "type": "object"
+    }
+  },
+  "$id": "https://bruv.dev/schemas/0.1.0/output.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "answers": {
+      "additionalProperties": {
+        "discriminator": {
+          "mapping": {
+            "choice": "#/$defs/ChoiceAnswer",
+            "noul": "#/$defs/NoulAnswer",
+            "score": "#/$defs/ScoreAnswer"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/NoulAnswer"
+          },
+          {
+            "$ref": "#/$defs/ChoiceAnswer"
+          },
+          {
+            "$ref": "#/$defs/ScoreAnswer"
+          }
+        ]
+      },
+      "title": "Answers",
+      "type": "object"
+    },
+    "backend": {
+      "enum": [
+        "typesafe",
+        "simple-jev"
+      ],
+      "title": "Backend",
+      "type": "string"
+    },
+    "calibrated": {
+      "title": "Calibrated",
+      "type": "boolean"
+    },
+    "latency_ms": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latency Ms"
+    },
+    "model": {
+      "title": "Model",
+      "type": "string"
+    },
+    "provider_metadata": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Provider Metadata"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Usage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "backend",
+    "model",
+    "calibrated",
+    "answers"
+  ],
+  "title": "DecisionResult",
+  "type": "object",
+  "version": "0.1.0"
+}

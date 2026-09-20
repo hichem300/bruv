@@ -1,0 +1,38 @@
+{
+  "$id": "https://bruv.dev/schemas/0.1.0/error.schema.json",
+  "properties": {
+    "error": {
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "paid_request": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "paid_request",
+        "action"
+      ],
+      "type": "object"
+    },
+    "ok": {
+      "const": false,
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ok",
+    "error"
+  ],
+  "type": "object",
+  "version": "0.1.0"
+}

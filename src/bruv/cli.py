@@ -20,6 +20,8 @@ from bruv.command_builders import (
     parse_options,
 )
 from bruv.config import BackendName, load_config
+from bruv.contracts import SCHEMAS
+from bruv.contracts import spec as build_spec
 from bruv.domain.questions import ChoiceQuestion, JsonValue, NoulQuestion, ScoreQuestion
 from bruv.domain.requests import DecisionRequest
 from bruv.domain.results import DecisionResult
@@ -356,6 +358,37 @@ def _options(
         fail_under=fail_under,
         abstain_band=band,
     )
+
+
+@app.command()
+def spec(
+    output: Annotated[str, typer.Option("--output", help="human|json")] = "human",
+) -> None:
+    """Print the machine-readable CLI command spec."""
+    data = build_spec()
+    if output == "json":
+        typer.echo(render_success_json(data))
+    else:
+        for command in data["commands"]:
+            typer.echo(f"{command['name']}: {command['description']}")
+
+
+@app.command()
+def schema(
+    name: Annotated[str, typer.Argument(help="request|output|error")],
+) -> None:
+    """Print a JSON Schema for the named contract."""
+    if name not in SCHEMAS:
+        typer.echo(f"error: unknown schema {name!r}; choose request, output, or error", err=True)
+        raise typer.Exit(code=2)
+    typer.echo(render_success_json(SCHEMAS[name]()))
+
+
+def render_success_json(value: object) -> str:
+    """Render an arbitrary JSON object deterministically."""
+    import json
+
+    return json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
 
 
 def main() -> None:
