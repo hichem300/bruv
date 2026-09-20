@@ -107,8 +107,7 @@ Canonical domain models must not import provider SDK types.
 
 ```python
 class DecisionBackend(Protocol):
-    def evaluate(self, request: DecisionRequest) -> DecisionResult:
-        ...
+    def evaluate(self, request: DecisionRequest) -> DecisionResult: ...
 ```
 
 One method keeps interface small. Configuration, authentication, HTTP lifecycle, request translation, and response translation remain adapter implementation details.
@@ -119,11 +118,9 @@ Adapters also expose immutable backend capabilities during construction or throu
 
 ```python
 class DecisionFacade:
-    def evaluate(self, request: DecisionRequest) -> DecisionResult:
-        ...
+    def evaluate(self, request: DecisionRequest) -> DecisionResult: ...
 
-    def validate(self, request: DecisionRequest) -> ValidationResult:
-        ...
+    def validate(self, request: DecisionRequest) -> ValidationResult: ...
 ```
 
 Facade responsibilities:
@@ -141,8 +138,7 @@ Facade does not format terminal output or terminate process.
 A small factory selects concrete adapter at process startup:
 
 ```python
-def create_backend(config: AppConfig) -> DecisionBackend:
-    ...
+def create_backend(config: AppConfig) -> DecisionBackend: ...
 ```
 
 This is composition-root wiring, not an Abstract Factory hierarchy.
