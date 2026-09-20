@@ -44,9 +44,7 @@ def _question_payload(question: Any) -> dict[str, Any]:
             "instructions": question.instructions,
         }
         if question.criteria is not None:
-            payload["criteria"] = {
-                key: value for key, value in question.criteria.items()
-            }
+            payload["criteria"] = {key: value for key, value in question.criteria.items()}
         else:
             payload["criteria"] = None
         return payload
