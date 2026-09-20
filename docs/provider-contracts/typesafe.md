@@ -72,7 +72,17 @@ Choice(*, instructions: JSONContent | None = None, criteria: Mapping[str, JSONCo
 Score(*, instructions: JSONContent | None = None, criteria: Sequence[JSONContent])
 ```
 
-Wire discriminators are `type: "noul"`, `type: "choice"`, and `type: "score"`. `Noul.criteria` may describe `true` and `false`. `Choice.criteria` maps labels to descriptions or `None`. `Score.criteria` is a nonempty ordered sequence. Official Python SDK docs do not state all bruv domain limits, so adapter code must not infer provider limits absent from cited pages.
+Wire discriminators are `type: "noul"`, `type: "choice"`, and `type: "score"`. `Noul.criteria` may describe `true` and `false`. `Choice.criteria` maps labels to descriptions or `None`. `Score.criteria` is a nonempty ordered sequence.
+
+### SDK/API validation mismatch
+
+The official SDK and HTTP API references expose different validation boundaries:
+
+- Every SDK constructor accepts `instructions: JSONContent | None = None`; the SDK question docs therefore allow omitted or explicit `None` instructions. The HTTP API marks `instructions` required for every question type and permits only string, object, or array values, not null.
+- The SDK requires `criteria` when constructing Choice and Score questions. Its client additionally documents errors for an empty questions map and empty Score criteria. These are SDK-side rules, not the complete HTTP contract.
+- The HTTP API requires Score criteria to contain 2–10 levels and permits at most 255 Choice options. The cited SDK question reference does not document those cardinality limits.
+
+Adapter implication: bruv must validate the stricter cited HTTP contract before constructing SDK questions: reject missing or null instructions, reject Score criteria outside 2–10 levels, and reject Choice criteria above 255 options. SDK acceptance alone does not establish that a request is valid for the HTTP API. No additional Choice minimum is inferred from these TypeSafe sources.
 
 ## Response contract
 

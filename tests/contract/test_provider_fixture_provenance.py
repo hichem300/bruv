@@ -1,9 +1,21 @@
+import json
+import re
 from pathlib import Path
 
+CONTRACT_FIXTURES = {
+    "typesafe.md": "tests/fixtures/typesafe/success.json",
+    "simple-jev.md": "tests/fixtures/simple_jev/success.json",
+}
 
-def test_contract_notes_pin_source_and_access_date() -> None:
-    for name in ("typesafe.md", "simple-jev.md"):
-        text = Path("docs/provider-contracts", name).read_text()
-        assert "Source:" in text
-        assert "Accessed: 2026-09-20" in text
-        assert "Version/commit:" in text
+
+def test_contract_notes_and_fixtures_have_provenance() -> None:
+    for document, fixture in CONTRACT_FIXTURES.items():
+        text = Path("docs/provider-contracts", document).read_text()
+
+        for marker in ("Source", "Accessed", "Version/commit"):
+            values = re.findall(rf"^{re.escape(marker)}:\s*(.+)$", text, re.MULTILINE)
+            assert values and all(value.strip() for value in values)
+
+        payload = json.loads(Path(fixture).read_text())
+        assert isinstance(payload, dict)
+        assert re.search(rf"`{re.escape(fixture)}`[^\n]*\bsynthetic\b", text, re.IGNORECASE)
