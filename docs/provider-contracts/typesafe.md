@@ -2,6 +2,7 @@
 
 Source: https://docs.typesafe.ai/introduction/quickstart
 Source: https://docs.typesafe.ai/llms.txt
+Source: https://docs.typesafe.ai/api.md
 Source: https://docs.typesafe.ai/sdk/python.md
 Source: https://docs.typesafe.ai/sdk/python/api/clients/sync.md
 Source: https://docs.typesafe.ai/sdk/python/api/types/questions.md
@@ -66,9 +67,9 @@ client.system_one(
 All constructors come from `typesafe_sdk`:
 
 ```python
-Noul(instructions=JSONContent | None, criteria=NoulCriteria | None)
-Choice(instructions=JSONContent | None, criteria=Mapping[str, JSONContent | None])
-Score(instructions=JSONContent | None, criteria=Sequence[JSONContent])
+Noul(*, instructions: JSONContent | None = None, criteria: NoulCriteria | None = None)
+Choice(*, instructions: JSONContent | None = None, criteria: Mapping[str, JSONContent | None])
+Score(*, instructions: JSONContent | None = None, criteria: Sequence[JSONContent])
 ```
 
 Wire discriminators are `type: "noul"`, `type: "choice"`, and `type: "score"`. `Noul.criteria` may describe `true` and `false`. `Choice.criteria` maps labels to descriptions or `None`. `Score.criteria` is a nonempty ordered sequence. Official Python SDK docs do not state all bruv domain limits, so adapter code must not infer provider limits absent from cited pages.
