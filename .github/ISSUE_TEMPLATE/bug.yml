@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a bruv bug with a redacted reproduction
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Do not include API keys, credentials, or private endpoints.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the unexpected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Redacted reproduction
+      description: The exact command and output with secrets removed.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: bruv version
+    validations:
+      required: true
+  - type: input
+    id: backend
+    attributes:
+      label: Backend (typesafe|simple-jev)
+    validations:
+      required: true
