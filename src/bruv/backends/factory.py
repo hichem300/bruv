@@ -17,6 +17,7 @@ from bruv.backends.interface import DecisionBackend
 from bruv.backends.simple_jev import SimpleJevAdapter
 from bruv.backends.typesafe import TypeSafeJevAdapter
 from bruv.config import AppConfig
+from bruv.domain.validation import BackendCapabilities
 from bruv.onboarding.credentials import Credentials
 
 ClientFactory = Callable[[AppConfig, Credentials], Any]
@@ -28,6 +29,13 @@ def _default_simple_jev_client(config: AppConfig) -> httpx.Client:
         verify=True,
         timeout=config.request_timeout_seconds,
     )
+
+
+def backend_capabilities(config: AppConfig) -> BackendCapabilities:
+    """Return capabilities for the configured backend without any client."""
+    if config.backend == "simple-jev":
+        return SimpleJevAdapter.capabilities
+    return TypeSafeJevAdapter.capabilities
 
 
 def create_backend(
@@ -95,4 +103,4 @@ def _default_typesafe_client(config: AppConfig, credentials: Credentials) -> obj
     return TypeSafeClient(**kwargs)
 
 
-__all__ = ["create_backend"]
+__all__ = ["backend_capabilities", "create_backend"]
