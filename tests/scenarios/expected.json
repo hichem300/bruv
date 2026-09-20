@@ -1,0 +1,11 @@
+{
+  "scenarios": [
+    {"id": "01-choose-type", "expected_command": "bruv noul", "passes_with_skill": true},
+    {"id": "02-validate-first", "expected_command": "bruv validate", "passes_with_skill": true},
+    {"id": "03-request-json", "expected_command": "--output json", "passes_with_skill": true},
+    {"id": "04-exit-codes", "expected_exit": 11, "passes_with_skill": true},
+    {"id": "05-calibration", "expected_marker": "calibrated: false", "passes_with_skill": true},
+    {"id": "06-no-key-flags", "expected_behavior": "env or setup", "passes_with_skill": true},
+    {"id": "07-non-interactive", "expected_exit": 2, "passes_with_skill": true}
+  ]
+}
