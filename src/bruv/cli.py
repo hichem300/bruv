@@ -29,6 +29,8 @@ from bruv.domain.validation import BackendCapabilities
 from bruv.exit_codes import CommandOutcome, exit_code_for
 from bruv.gates import GateOptions, apply_gate
 from bruv.onboarding.credentials import load_credentials
+from bruv.onboarding.doctor import run_doctor
+from bruv.onboarding.setup import run_setup
 from bruv.output.fields import FieldError, get_field
 from bruv.output.json_output import render_error, render_success
 from bruv.output.terminal import render_field, render_human_error, render_human_result
@@ -415,6 +417,51 @@ def skill_command(
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
     typer.echo(f"installed: {plan.destination}")
+
+
+@app.command()
+def setup() -> None:
+    """Guided credential and backend setup (interactive only)."""
+    import sys
+
+    if not sys.stdin.isatty():
+        typer.echo(
+            "error: `bruv setup` is interactive. Set TYPESAFE_API_KEY or edit the "
+            "config file in a non-interactive environment.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    if not typer.confirm("Run interactive setup?", default=True):
+        raise typer.Exit(code=0)
+    try:
+        result = run_setup(
+            prompt=typer.prompt,
+            confirm=typer.confirm,
+            print_line=lambda msg: typer.echo(msg),
+            env={},
+        )
+    except Exception as exc:  # noqa: BLE001
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    typer.echo(f"backend: {result.backend}")
+    typer.echo(f"next: {result.next_command}")
+
+
+@app.command()
+def doctor(
+    check_freshness: Annotated[bool, typer.Option("--check-freshness")] = False,
+) -> None:
+    """Run non-paid diagnostics and print fixes for failed items."""
+    results = run_doctor(check_freshness=check_freshness)
+    any_failed = False
+    for item in results:
+        status = "ok" if item.ok else "FAIL"
+        typer.echo(f"{status} {item.name}: {item.message}")
+        if not item.ok:
+            any_failed = True
+            if item.fix:
+                typer.echo(f"  fix: {item.fix}")
+    raise typer.Exit(code=1 if any_failed else 0)
 
 
 def render_success_json(value: object) -> str:
