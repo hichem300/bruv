@@ -33,6 +33,7 @@ from bruv.output.fields import FieldError, get_field
 from bruv.output.json_output import render_error, render_success
 from bruv.output.terminal import render_field, render_human_error, render_human_result
 from bruv.redaction import redacted_dry_run
+from bruv.skills.installer import apply_skill_install, plan_skill_install
 
 app = typer.Typer(help="no yap, only fax")
 
@@ -382,6 +383,38 @@ def schema(
         typer.echo(f"error: unknown schema {name!r}; choose request, output, or error", err=True)
         raise typer.Exit(code=2)
     typer.echo(render_success_json(SCHEMAS[name]()))
+
+
+@app.command("skill")
+def skill_command(
+    action: Annotated[str, typer.Argument(help="install")],
+    target: Annotated[str, typer.Option("--target", help="codex|claude|pi")] = "pi",
+    scope: Annotated[str, typer.Option("--scope", help="user|project")] = "user",
+    project_root: Annotated[Path | None, typer.Option("--project-root")] = None,
+    force: Annotated[bool, typer.Option("--force", help="Replace existing skill.")] = False,
+) -> None:
+    """Install the bruv skill into an agent's skill directory."""
+    if action != "install":
+        typer.echo(f"error: unsupported skill action {action!r}; use 'install'", err=True)
+        raise typer.Exit(code=2)
+    if target not in ("codex", "claude", "pi"):
+        typer.echo(f"error: --target must be codex, claude, or pi, got {target!r}", err=True)
+        raise typer.Exit(code=2)
+    if scope not in ("user", "project"):
+        typer.echo(f"error: --scope must be user or project, got {scope!r}", err=True)
+        raise typer.Exit(code=2)
+    try:
+        plan = plan_skill_install(target, scope, project_root)  # type: ignore[arg-type]
+    except (FileNotFoundError, ValueError) as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    typer.echo(f"plan: {plan.source} -> {plan.destination} (replacing={plan.replacing})")
+    try:
+        apply_skill_install(plan, force=force)
+    except FileExistsError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+    typer.echo(f"installed: {plan.destination}")
 
 
 def render_success_json(value: object) -> str:
