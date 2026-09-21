@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from pydantic import ValidationError
 
@@ -40,6 +42,47 @@ def test_result_parses_discriminated_answers_and_defaults_metadata() -> None:
     assert result.provider_metadata is None
 
 
+def test_result_accepts_needle_confidence_only_answers() -> None:
+    result = DecisionResult(
+        backend="needle",
+        model="Cactus-Compute/needle3",
+        calibrated=True,
+        answers={
+            "refund": NoulAnswer(value=True, confidence=0.9),
+            "route": ChoiceAnswer(choice="billing", confidence=0.8),
+            "urgency": ScoreAnswer(
+                score=2.0,
+                confidence=0.7,
+                legend={"0": "low", "1": "medium", "2": "high"},
+            ),
+        },
+    )
+
+    assert result.backend == "needle"
+    expected_answers = {
+        "refund": {"type": "noul", "value": True, "confidence": 0.9},
+        "route": {"type": "choice", "choice": "billing", "confidence": 0.8},
+        "urgency": {
+            "type": "score",
+            "score": 2.0,
+            "confidence": 0.7,
+            "legend": {"0": "low", "1": "medium", "2": "high"},
+        },
+    }
+    assert result.model_dump()["answers"] == expected_answers
+    assert json.loads(result.model_dump_json())["answers"] == expected_answers
+    assert result.answers["route"].probabilities is None  # type: ignore[union-attr]
+    assert result.answers["urgency"].probabilities is None  # type: ignore[union-attr]
+
+
+def test_probability_noul_serializes_with_existing_shape() -> None:
+    answer = NoulAnswer(noul=0.75)
+    expected = {"type": "noul", "noul": 0.75}
+
+    assert answer.model_dump() == expected
+    assert json.loads(answer.model_dump_json()) == expected
+
+
 def test_result_accepts_success_envelope_metadata() -> None:
     result = DecisionResult.model_validate(
         {
@@ -63,6 +106,22 @@ def test_result_accepts_success_envelope_metadata() -> None:
 def test_noul_probability_must_be_finite_and_bounded(value: float) -> None:
     with pytest.raises(ValidationError):
         NoulAnswer(noul=value)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"value": True},
+        {"confidence": 0.9},
+        {"noul": 0.9, "value": True},
+        {"noul": 0.9, "confidence": 0.9},
+        {"noul": 0.9, "value": True, "confidence": 0.9},
+    ],
+)
+def test_noul_rejects_empty_partial_and_mixed_modes(payload: dict[str, object]) -> None:
+    with pytest.raises(ValidationError, match="either noul or both value and confidence"):
+        NoulAnswer(**payload)  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize("value", [-0.01, 1.01, float("nan"), float("-inf")])

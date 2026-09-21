@@ -26,11 +26,27 @@ def render_human_result(result: DecisionResult) -> str:
     ]
     for question_id, answer in result.answers.items():
         if isinstance(answer, NoulAnswer):
-            lines.append(f"{question_id}: {answer.noul:.3f}")
+            if answer.noul is not None:
+                lines.append(f"{question_id}: {answer.noul:.3f}")
+            else:
+                lines.append(
+                    f"{question_id}: {str(answer.value).lower()} "
+                    f"(confidence: {answer.confidence:.3f})"
+                )
         elif isinstance(answer, ChoiceAnswer):
-            lines.append(f"{question_id}: {answer.choice}")
+            suffix = (
+                ""
+                if answer.probabilities is not None
+                else f" (confidence: {answer.confidence:.3f})"
+            )
+            lines.append(f"{question_id}: {answer.choice}{suffix}")
         elif isinstance(answer, ScoreAnswer):
-            lines.append(f"{question_id}: {answer.score:.3f}")
+            suffix = (
+                ""
+                if answer.probabilities is not None
+                else f" (confidence: {answer.confidence:.3f})"
+            )
+            lines.append(f"{question_id}: {answer.score:.3f}{suffix}")
     return "\n".join(lines) + "\n"
 
 

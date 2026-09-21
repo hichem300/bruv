@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import math
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, TypeAlias, cast
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from bruv.domain.questions import (
     CanonicalModel,
@@ -42,24 +48,57 @@ def _validate_probability_distribution(probabilities: dict[str, float]) -> None:
 
 class NoulAnswer(CanonicalModel):
     type: Literal["noul"] = "noul"
-    noul: Probability
+    noul: Probability | None = None
+    value: bool | None = None
+    confidence: Probability | None = None
+
+    @model_validator(mode="after")
+    def validate_answer_mode(self) -> NoulAnswer:
+        probability_mode = self.noul is not None and self.value is None and self.confidence is None
+        selection_mode = (
+            self.noul is None and self.value is not None and self.confidence is not None
+        )
+        if not (probability_mode or selection_mode):
+            raise ValueError("noul answer must contain either noul or both value and confidence")
+        return self
+
+    @model_serializer(mode="wrap")
+    def serialize_answer(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        serialized = cast(dict[str, Any], handler(self))
+        if self.noul is not None:
+            serialized.pop("value", None)
+            serialized.pop("confidence", None)
+        else:
+            serialized.pop("noul", None)
+        return serialized
 
 
 class ChoiceAnswer(CanonicalModel):
     type: Literal["choice"] = "choice"
     choice: NonBlankString
     confidence: Probability
-    probabilities: Annotated[
-        dict[NonBlankString, Probability],
-        Field(min_length=1),
-    ]
+    probabilities: (
+        Annotated[
+            dict[NonBlankString, Probability],
+            Field(min_length=1),
+        ]
+        | None
+    ) = None
 
     @model_validator(mode="after")
     def validate_probability_distribution(self) -> ChoiceAnswer:
-        if self.choice not in self.probabilities:
-            raise ValueError("choice must have a matching probability")
-        _validate_probability_distribution(self.probabilities)
+        if self.probabilities is not None:
+            if self.choice not in self.probabilities:
+                raise ValueError("choice must have a matching probability")
+            _validate_probability_distribution(self.probabilities)
         return self
+
+    @model_serializer(mode="wrap")
+    def serialize_answer(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        serialized = cast(dict[str, Any], handler(self))
+        if self.probabilities is None:
+            serialized.pop("probabilities", None)
+        return serialized
 
 
 class ScoreAnswer(CanonicalModel):
@@ -67,10 +106,13 @@ class ScoreAnswer(CanonicalModel):
     score: FiniteFloat
     confidence: Probability
     legend: Annotated[dict[NonBlankString, JsonValue], Field(min_length=1)]
-    probabilities: Annotated[
-        dict[NonBlankString, Probability],
-        Field(min_length=1),
-    ]
+    probabilities: (
+        Annotated[
+            dict[NonBlankString, Probability],
+            Field(min_length=1),
+        ]
+        | None
+    ) = None
 
     @field_validator("legend", mode="before")
     @classmethod
@@ -79,10 +121,18 @@ class ScoreAnswer(CanonicalModel):
 
     @model_validator(mode="after")
     def validate_probability_distribution(self) -> ScoreAnswer:
-        if self.legend.keys() != self.probabilities.keys():
-            raise ValueError("legend and probabilities must have identical keys")
-        _validate_probability_distribution(self.probabilities)
+        if self.probabilities is not None:
+            if self.legend.keys() != self.probabilities.keys():
+                raise ValueError("legend and probabilities must have identical keys")
+            _validate_probability_distribution(self.probabilities)
         return self
+
+    @model_serializer(mode="wrap")
+    def serialize_answer(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        serialized = cast(dict[str, Any], handler(self))
+        if self.probabilities is None:
+            serialized.pop("probabilities", None)
+        return serialized
 
 
 Answer: TypeAlias = Annotated[
@@ -97,7 +147,7 @@ class Usage(CanonicalModel):
 
 
 class DecisionResult(CanonicalModel):
-    backend: Literal["typesafe", "simple-jev"]
+    backend: Literal["typesafe", "simple-jev", "needle"]
     model: NonBlankString
     calibrated: bool
     answers: dict[NonBlankString, Answer]
