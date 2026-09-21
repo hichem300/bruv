@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated
 
 import typer
 from pydantic import ValidationError
@@ -19,7 +19,7 @@ from bruv.command_builders import (
     parse_levels,
     parse_options,
 )
-from bruv.config import BackendName, load_config
+from bruv.config import load_config
 from bruv.contracts import SCHEMAS
 from bruv.contracts import spec as build_spec
 from bruv.demos.funnel_audit import copy_demo_to, load_demo_request
@@ -117,7 +117,7 @@ def _build_request(builder: Callable[[], DecisionRequest]) -> DecisionRequest:
 
 def run_evaluation(options: EvaluationOptions, request: DecisionRequest) -> None:
     """Shared command runner: configure, validate, gate, and exit."""
-    config = load_config(backend_override=cast(BackendName | None, options.backend))
+    config = load_config(backend_override=options.backend)
     capabilities = backend_capabilities(config)
 
     if options.dry_run:
@@ -293,13 +293,15 @@ def validate(
     quiet: Annotated[bool, typer.Option("--quiet")] = False,
 ) -> None:
     """Validate a canonical request without performing any paid call."""
-    if backend is not None and backend not in ("typesafe", "simple-jev"):
-        typer.echo(
-            f"error: --backend must be 'typesafe' or 'simple-jev', got {backend!r}", err=True
-        )
-        raise typer.Exit(code=2)
-    config = load_config(backend_override=cast(BackendName | None, backend))
-    capabilities = backend_capabilities(config)
+    try:
+        config = load_config(backend_override=backend)
+        capabilities = backend_capabilities(config)
+    except ApplicationError as error:
+        if output == "json":
+            typer.echo(render_error(error))
+        else:
+            typer.echo(render_human_error(error), err=True)
+        raise typer.Exit(code=exit_code_for(CommandOutcome(error=error))) from error
 
     class _NeverCallBackend:
         def __init__(self, caps: BackendCapabilities) -> None:

@@ -48,6 +48,17 @@ def test_validate_missing_eval_file_exits_two() -> None:
     assert result.exit_code == 2
 
 
+def test_validate_unknown_backend_exits_two_without_traceback(tmp_path: Path) -> None:
+    path = tmp_path / "eval.json"
+    path.write_text(json.dumps(_eval_payload()), encoding="utf-8")
+    result = runner.invoke(app, ["validate", "-f", str(path), "--backend", "bogus"])
+    assert result.exit_code == 2
+    assert result.exception is not None
+    output = result.stdout + result.stderr
+    assert "configuration_error" in output
+    assert "Traceback" not in output
+
+
 def test_validate_json_output(tmp_path: Path) -> None:
     path = tmp_path / "eval.json"
     path.write_text(json.dumps(_eval_payload()), encoding="utf-8")

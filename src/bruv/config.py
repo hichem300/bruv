@@ -8,11 +8,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 import platformdirs
-from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError
+from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
 
 from bruv.application import ConfigurationError
 
-BackendName = Literal["typesafe", "simple-jev"]
+BackendName = str
 
 
 class AppConfig(BaseModel):
@@ -27,6 +27,16 @@ class AppConfig(BaseModel):
     simple_jev_model: str = "Qwen/Qwen3.5-0.8B"
     request_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     output: Literal["human", "json"] = "human"
+
+    @field_validator("backend")
+    @classmethod
+    def _registered_backend(cls, value: str) -> str:
+        from bruv.backends.registry import backend_names
+
+        if value not in backend_names:
+            supported = ", ".join(repr(name) for name in backend_names)
+            raise ValueError(f"backend must be one of: {supported}")
+        return value
 
 
 def config_dir() -> Path:
@@ -67,12 +77,6 @@ def load_config(
     file_data = _read_toml(path if path is not None else config_path())
 
     env_backend = environment.get("JEV_BACKEND")
-    if env_backend and env_backend not in ("typesafe", "simple-jev"):
-        raise ConfigurationError(
-            message=f"JEV_BACKEND must be 'typesafe' or 'simple-jev', got {env_backend!r}.",
-            paid_request=False,
-            action="Set JEV_BACKEND to a supported backend.",
-        )
 
     data: dict[str, Any] = {}
     data.update(file_data)

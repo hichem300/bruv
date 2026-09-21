@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from bruv import __version__
+from bruv.backends.registry import backend_names
 
 COMMANDS: list[dict[str, Any]] = [
     {
@@ -68,7 +69,7 @@ COMMON_FLAGS = [
     "--abstain-band",
 ]
 
-BACKEND_VALUES = ["typesafe", "simple-jev"]
+BACKEND_VALUES = list(backend_names)
 OUTPUT_MODES = ["human", "json"]
 
 EXIT_CODES = {
