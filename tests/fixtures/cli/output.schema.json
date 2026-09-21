@@ -1,5 +1,88 @@
 {
     "$defs": {
+        "AbstainAnswer": {
+            "additionalProperties": false,
+            "properties": {
+                "confidence": {
+                    "anyOf": [
+                        {
+                            "maximum": 1.0,
+                            "minimum": 0.0,
+                            "type": "number"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Confidence"
+                },
+                "legend": {
+                    "anyOf": [
+                        {
+                            "additionalProperties": {
+                                "$ref": "#/$defs/JsonValue"
+                            },
+                            "minProperties": 1,
+                            "type": "object"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Legend"
+                },
+                "probabilities": {
+                    "anyOf": [
+                        {
+                            "additionalProperties": {
+                                "maximum": 1.0,
+                                "minimum": 0.0,
+                                "type": "number"
+                            },
+                            "minProperties": 1,
+                            "type": "object"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Probabilities"
+                },
+                "reason": {
+                    "enum": [
+                        "insufficient_evidence",
+                        "provider_refusal",
+                        "content_filter"
+                    ],
+                    "title": "Reason",
+                    "type": "string"
+                },
+                "source_question_type": {
+                    "enum": [
+                        "noul",
+                        "choice",
+                        "score"
+                    ],
+                    "title": "Source Question Type",
+                    "type": "string"
+                },
+                "type": {
+                    "const": "abstain",
+                    "default": "abstain",
+                    "title": "Type",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "reason",
+                "source_question_type"
+            ],
+            "title": "AbstainAnswer",
+            "type": "object"
+        },
         "ChoiceAnswer": {
             "additionalProperties": false,
             "properties": {
@@ -194,6 +277,7 @@
             "additionalProperties": {
                 "discriminator": {
                     "mapping": {
+                        "abstain": "#/$defs/AbstainAnswer",
                         "choice": "#/$defs/ChoiceAnswer",
                         "noul": "#/$defs/NoulAnswer",
                         "score": "#/$defs/ScoreAnswer"
@@ -209,6 +293,9 @@
                     },
                     {
                         "$ref": "#/$defs/ScoreAnswer"
+                    },
+                    {
+                        "$ref": "#/$defs/AbstainAnswer"
                     }
                 ]
             },
@@ -216,11 +303,6 @@
             "type": "object"
         },
         "backend": {
-            "enum": [
-                "typesafe",
-                "simple-jev",
-                "needle"
-            ],
             "title": "Backend",
             "type": "string"
         },

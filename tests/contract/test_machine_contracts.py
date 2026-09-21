@@ -67,7 +67,7 @@ def test_output_schema_advertises_needle_and_relaxed_confidence_only_fields() ->
     result = runner.invoke(app, ["schema", "output"])
     assert result.exit_code == 0
     schema = json.loads(result.stdout)
-    assert "needle" in schema["properties"]["backend"]["enum"]
+    assert schema["properties"]["backend"]["type"] == "string"
 
     noul = schema["$defs"]["NoulAnswer"]
     assert "value" in noul["properties"]

@@ -27,7 +27,7 @@ from bruv.application import (
 from bruv.backends.interface import DecisionBackend
 from bruv.domain.questions import ChoiceQuestion, JsonValue, NoulQuestion, ScoreQuestion
 from bruv.domain.requests import DecisionRequest
-from bruv.domain.results import ChoiceAnswer, DecisionResult, NoulAnswer, ScoreAnswer
+from bruv.domain.results import Answer, ChoiceAnswer, DecisionResult, NoulAnswer, ScoreAnswer
 from bruv.domain.validation import BackendCapabilities
 
 _DEFAULT_MODEL = "Cactus-Compute/needle3"
@@ -380,7 +380,7 @@ class NeedleAdapter(DecisionBackend):
                 ensure_ascii=False,
             )
         )
-        answers: dict[str, NoulAnswer | ChoiceAnswer | ScoreAnswer] = {}
+        answers: dict[str, Answer] = {}
 
         for question_id, question in request.questions.items():
             schema, description, legend = _question_contract(question)

@@ -28,6 +28,8 @@ _ANSWER_FIELDS = {
     "confidence",
     "probabilities",
     "legend",
+    "reason",
+    "source_question_type",
 }
 
 _USAGE_FIELDS = {"input_tokens", "output_tokens"}

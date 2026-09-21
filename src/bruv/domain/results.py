@@ -135,8 +135,64 @@ class ScoreAnswer(CanonicalModel):
         return serialized
 
 
+ABSTAIN_ANSWER_ID = "__abstain__"
+
+
+class AbstainAnswer(CanonicalModel):
+    type: Literal["abstain"] = "abstain"
+    reason: Literal["insufficient_evidence", "provider_refusal", "content_filter"]
+    source_question_type: Literal["noul", "choice", "score"]
+    confidence: Probability | None = None
+    probabilities: (
+        Annotated[
+            dict[NonBlankString, Probability],
+            Field(min_length=1),
+        ]
+        | None
+    ) = None
+    legend: Annotated[dict[NonBlankString, JsonValue], Field(min_length=1)] | None = None
+
+    @field_validator("legend", mode="before")
+    @classmethod
+    def validate_legend_json(cls, value: Any) -> Any:
+        return ensure_json_compatible(value)
+
+    @model_validator(mode="after")
+    def validate_answer_mode(self) -> AbstainAnswer:
+        if self.confidence is not None and self.probabilities is not None:
+            if ABSTAIN_ANSWER_ID not in self.probabilities:
+                raise ValueError(
+                    "probability distribution must include canonical abstain key "
+                    f"{ABSTAIN_ANSWER_ID!r}"
+                )
+            if self.probabilities[ABSTAIN_ANSWER_ID] != self.confidence:
+                raise ValueError("abstain probability must exactly equal confidence")
+            _validate_probability_distribution(self.probabilities)
+            if self.legend is not None and self.legend.keys() != self.probabilities.keys():
+                raise ValueError("legend and probabilities must have identical keys")
+        elif self.confidence is None and self.probabilities is None and self.legend is None:
+            pass
+        else:
+            raise ValueError(
+                "abstain answer must contain either confidence and probabilities or none of "
+                "confidence, probabilities, and legend"
+            )
+        return self
+
+    @model_serializer(mode="wrap")
+    def serialize_answer(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        serialized = cast(dict[str, Any], handler(self))
+        if self.confidence is None:
+            serialized.pop("confidence", None)
+        if self.probabilities is None:
+            serialized.pop("probabilities", None)
+        if self.legend is None:
+            serialized.pop("legend", None)
+        return serialized
+
+
 Answer: TypeAlias = Annotated[
-    NoulAnswer | ChoiceAnswer | ScoreAnswer,
+    NoulAnswer | ChoiceAnswer | ScoreAnswer | AbstainAnswer,
     Field(discriminator="type"),
 ]
 
@@ -147,7 +203,7 @@ class Usage(CanonicalModel):
 
 
 class DecisionResult(CanonicalModel):
-    backend: Literal["typesafe", "simple-jev", "needle"]
+    backend: NonBlankString
     model: NonBlankString
     calibrated: bool
     answers: dict[NonBlankString, Answer]

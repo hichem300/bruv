@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from bruv.application import ApplicationError
-from bruv.domain.results import ChoiceAnswer, DecisionResult, NoulAnswer, ScoreAnswer
+from bruv.domain.results import AbstainAnswer, ChoiceAnswer, DecisionResult, NoulAnswer, ScoreAnswer
 
 _CALIBRATION_LABEL = {
     True: "calibrated",
@@ -47,6 +47,13 @@ def render_human_result(result: DecisionResult) -> str:
                 else f" (confidence: {answer.confidence:.3f})"
             )
             lines.append(f"{question_id}: {answer.score:.3f}{suffix}")
+        elif isinstance(answer, AbstainAnswer):
+            if answer.confidence is not None:
+                lines.append(
+                    f"{question_id}: abstained ({answer.reason}, p={answer.confidence:.3f})"
+                )
+            else:
+                lines.append(f"{question_id}: abstained ({answer.reason})")
     return "\n".join(lines) + "\n"
 
 
