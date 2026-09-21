@@ -36,6 +36,7 @@ Prompt contract:
 - Template `choice`/`score` text: `"Question: {question}\n\nContext:\n{context}"`.
 - Template `noul` text: `"Context:\n{context}\n\nEvaluate proposition: {proposition}"`.
 - Labels: choice `f"It is {opt.description}"`; score `f"{level.description} (Value: {level.value})"`; noul `f"true: {proposition}"` and `f"false: not {proposition}"`; abstention description always `insufficient evidence`.
+- bruv `ScoreQuestion.criteria` is a plain `list[JsonValue]`; it has no `description`/`value` objects. The adapter owns the score derivation: deterministic string-index IDs (`"0"`, `"1"`, ...), each level's deterministic JSON serialization (`json.dumps(level, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`) as its description text, label `f"{description} (Value: {index})"`, and the index as the numeric score value.
 - Assembled prompt: `<<LABEL>>desc1<<LABEL>>desc2...<<LABEL>>insufficient evidence<<SEP>>text` (abstention label first or last is irrelevant; order of labels matches candidate order, abstention slot is part of the label set).
 
 Calibration formula (K = total candidates including abstention slot):
@@ -181,6 +182,8 @@ Semantics: `explicit_abstention` — backend can emit canonical `AbstainAnswer`.
 ```python
 def _prompt_text(request: DecisionRequest, question: object) -> str:
     """All text the backend would embed in its prompt for this question."""
+    import json
+
     state = request.state
     state_text = state if isinstance(state, str) else json.dumps(
         state, sort_keys=True, separators=(",", ":"), ensure_ascii=False
@@ -201,9 +204,9 @@ Checks (issue codes: `reserved_input_marker`, `total_candidates_not_supported`, 
    - `choice`: total = `len(question.criteria) + 1` when `explicit_abstention` else `len(question.criteria)`.
    - `score`: same formula over `len(question.criteria)`.
    Total not in the set → validation issue before any inference.
-3. Reserved answer IDs: when `capabilities.reserved_answer_ids` is nonempty, any choice option ID (key of `question.criteria`) or score level ID colliding with a reserved ID is a validation issue. `noul` uses fixed IDs `true`/`false` and cannot collide.
+3. Reserved answer IDs: when `capabilities.reserved_answer_ids` is nonempty, any choice option ID (key of `question.criteria`) colliding with a reserved ID is a validation issue. `noul` uses fixed IDs `true`/`false` and score uses adapter-owned string indices, so neither can collide.
 
-- [ ] Derive score level IDs exactly as the adapter will: read `src/bruv/command_builders.py` `parse_levels` first and reuse its ID derivation (level mapping with optional explicit id, else string index). Do not invent a second derivation.
+- [ ] Derive score level IDs exactly as the adapter will: deterministic string indices (`str(index)` over `question.criteria`). Score level IDs are adapter-owned and never user-supplied, so reserved-answer-ID collision checks apply to choice option IDs only. Do not reference `command_builders.parse_levels`; it has no bearing on plain `JsonValue` score criteria.
 - [ ] Run checks:
 
 ```bash
@@ -377,6 +380,31 @@ def ensure_artifacts(repo_id: str = REPO_ID, revision: str = REVISION) -> dict[s
         raise
     offline = os.environ.get("HF_HUB_OFFLINE", "").strip().lower() in {"1", "true", "yes"}
     resolved: dict[str, Path] = {}
+    try:
+        from huggingface_hub.errors import (
+            EntryNotFoundError,
+            HfHubHTTPError,
+            LocalEntryNotFoundError,
+            OfflineModeIsEnabled,
+        )
+        import requests
+    except ModuleNotFoundError as exc:
+        if exc.name in {"huggingface_hub", "requests"}:
+            raise ConfigurationError(
+                message="RLCD support is not installed.",
+                paid_request=False,
+                action=_INSTALL_ACTION,
+            ) from None
+        raise
+    expected_transport_errors = (
+        EntryNotFoundError,
+        HfHubHTTPError,
+        LocalEntryNotFoundError,
+        OfflineModeIsEnabled,
+        requests.RequestException,
+        OSError,
+        TimeoutError,
+    )
     for artifact in REQUIRED_ARTIFACTS:
         try:
             path = Path(
@@ -387,7 +415,11 @@ def ensure_artifacts(repo_id: str = REPO_ID, revision: str = REVISION) -> dict[s
                     local_files_only=offline,
                 )
             )
-        except Exception as exc:  # network, missing cache, connection errors
+        except expected_transport_errors as exc:
+            # Exact boundary: HfHubHTTPError/RequestException cover network+HTTP failures,
+            # LocalEntryNotFoundError/OfflineModeIsEnabled cover offline-missing-cache, and
+            # OSError/TimeoutError cover filesystem and socket timeouts. Anything else is a
+            # bug and must surface as a traceback, not a backend-unavailable error.
             if offline:
                 raise BackendUnavailableError(
                     message=f"RLCD offline mode set and verified cache is missing: {artifact.name}.",
@@ -415,9 +447,9 @@ def ensure_artifacts(repo_id: str = REPO_ID, revision: str = REVISION) -> dict[s
 
 def cached_artifact_status() -> dict[str, str]:
     """Doctor-only: report hash status of cached artifacts without downloading or importing the adapter."""
-    try:
-        from huggingface_hub import try_to_load_from_cache
-    except ModuleNotFoundError:
+        try:
+            from huggingface_hub import try_to_load_from_cache
+        except ModuleNotFoundError:
         return {artifact.name: "dependency-missing" for artifact in REQUIRED_ARTIFACTS}
     status: dict[str, str] = {}
     for artifact in REQUIRED_ARTIFACTS:
@@ -435,7 +467,7 @@ def cached_artifact_status() -> dict[str, str]:
 cd /root/business/PROJECTS/bruv && .venv/bin/ruff format src/bruv/backends/rlcd_artifacts.py && .venv/bin/ruff check src/bruv && .venv/bin/mypy src/bruv
 ```
 
-Expected: clean. No network used in this task.
+Expected: clean. No network used in this task; the exact exception tuple keeps Ruff's `B902`/bleach-free lint surface clean without any `noqa`.
 
 - [ ] Commit: `feat: add pinned RLCD artifact verification`.
 
@@ -526,6 +558,10 @@ Prompt formatting (module-level, pure functions):
 ```python
 ABSTENTION_DESCRIPTION = "insufficient evidence"
 
+def _level_text(level: JsonValue) -> str:
+    return json.dumps(level, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
 def format_text(question, state_text: str) -> str:
     if isinstance(question, NoulQuestion):
         return f"Context:\n{state_text}\n\nEvaluate proposition: {question.instructions}"
@@ -547,15 +583,18 @@ def candidate_spec(question, capabilities) -> tuple[list[str], list[str]]:
         ids = list(question.criteria)
         labels = [f"It is {question.criteria[key]}" for key in ids]
     else:  # ScoreQuestion
-        ids = [level_id(level, index) for index, level in enumerate(question.criteria)]
-        labels = [f"{level_description(level)} (Value: {level_value(level)})" for level in question.criteria]
+        ids = [str(index) for index in range(len(question.criteria))]
+        labels = [
+            f"{_level_text(level)} (Value: {index})"
+            for index, level in enumerate(question.criteria)
+        ]
     if capabilities.explicit_abstention:
         ids.append(CANONICAL_ABSTAIN_ID)
         labels.append(ABSTENTION_DESCRIPTION)
     return labels, ids
 ```
 
-`level_id` / `level_description` / `level_value` reuse the exact level shape from `src/bruv/command_builders.py` `parse_levels` (same derivation as Task 2).
+Score level IDs are deterministic string indices over `question.criteria`, consistent with Task 2 validation; `parse_levels` plays no role for RLCD.
 
 Adapter:
 
@@ -597,7 +636,7 @@ Mapping rules (exact):
 - Normalize the winner ID: if upstream sentinel `__insufficient_evidence__` is the winning ID (or appears in any probability map), replace with `__abstain__` at the adapter boundary. Never emit the sentinel in canonical output or metadata.
 - Abstention wins (winner is abstention slot): emit `AbstainAnswer(reason="insufficient_evidence", source_question_type=<question type>, confidence=p_abstain, probabilities={canonical id: p for every candidate}, legend=<choice options or score levels legend, absent for noul>)`. No `ChoiceAnswer`/`ScoreAnswer`/`NoulAnswer` for that question; sibling questions complete normally.
 - `choice` substantive win: `ChoiceAnswer(choice=<option id>, confidence=p_win, probabilities={option id: renormalized p over substantive options only})` — abstention probability dropped from this map, remaining values renormalized to sum 1.0. Legend semantics unchanged (existing `ChoiceAnswer` has no legend field).
-- `score` substantive win: `ScoreAnswer(score=<float level value>, confidence=p_win, legend=<level legend>, probabilities={level id: renormalized p over substantive levels})`.
+- `score` substantive win: `ScoreAnswer(score=<float winning index>, confidence=p_win, legend={str(index): level}, probabilities={str(index): renormalized p over substantive levels})`. The adapter-owned index is the numeric score value.
 - `noul` substantive win: `NoulAnswer(noul=p_true / (p_true + p_false))` — conditional on sufficient evidence; probability mode (value/confidence omitted).
 - `DecisionResult(backend="rlcd-modernbert", model="heman10x/rlcd-modernbert-151m", calibrated=True, ...)`.
 - `provider_metadata` per question id: `{"rlcd": {"revision": REVISION, "calibration_scope": "open_domain_calibrated_v1", "temperature_path": f"per_k:{K}", "probability_base": "conditional_on_sufficient_evidence", "full_distribution": {canonical id: p (with __abstain__)}, "expected_value_over_substantive_mass": <upstream value, recorded only>}}`. `concentration` is not mapped.
@@ -680,13 +719,22 @@ rlcd-modernbert = [
 ]
 ```
 
+- [ ] Update `src/bruv/contracts/spec.py` and `src/bruv/contracts/schemas.py` in this same task so the commit stays green: `BACKEND_VALUES` is registry-derived and now includes `rlcd-modernbert` automatically; add a capability note string in the spec payload documenting RLCD probability semantics (substantive probabilities are conditional on sufficient evidence; abstained answers carry the full calibrated distribution with the reserved `__abstain__` key). `schemas.py` needs no hand edits: the output schema regenerates from `DecisionResult` (new `abstain` answer variant, widened `backend`); bump `SCHEMA_VERSION` if the project convention requires it for contract changes.
+- [ ] Regenerate machine-contract snapshots from runtime-generated data, never hand-authored, and update `tests/contract/test_machine_contracts.py` expectations in the same commit:
+
+```bash
+cd /root/business/PROJECTS/bruv && .venv/bin/pytest tests/contract/test_contract_snapshots.py tests/contract/test_machine_contracts.py -q --snapshot-update
+```
+
+(Use the repository's existing snapshot-update mechanism found in `tests/contract/test_contract_snapshots.py`; if none exists, follow its documented regeneration flow.)
+
 - [ ] Run checks:
 
 ```bash
-cd /root/business/PROJECTS/bruv && .venv/bin/ruff check src/bruv && .venv/bin/mypy src/bruv && .venv/bin/pytest tests/unit/backends/test_registry.py tests/unit/test_config.py -q
+cd /root/business/PROJECTS/bruv && .venv/bin/ruff check src/bruv && .venv/bin/mypy src/bruv && .venv/bin/pytest tests/unit/backends/test_registry.py tests/unit/test_config.py tests/contract -q
 ```
 
-Expected: pass. `bruv spec` now lists `rlcd-modernbert`; config validation accepts it without importing runtime packages.
+Expected: pass. `bruv spec` now lists `rlcd-modernbert`; snapshots updated; TypeSafe, Simple Jev, and Needle snapshot payloads byte-identical to before; config validation accepts the backend without importing runtime packages.
 
 - [ ] Commit: `feat: register rlcd-modernbert backend and extra`.
 
@@ -710,7 +758,16 @@ _HANDLERS["rlcd-modernbert"] = _rlcd_handler
 
 - [ ] Update `src/bruv/onboarding/doctor.py`. Doctor for `rlcd-modernbert` must never download, never import or construct the adapter, never create an ONNX session, never load the model:
   - `_check_dependency`: when `runtime_packages` is nonempty, check each package with `importlib.util.find_spec` and report the first missing package with the exact install hint; when empty, keep the existing `optional_module` path.
-  - `_check_platform`: `runs_local=True` covers RLCD via the existing Linux/macOS/Windows x86_64/arm64 check (onnxruntime ships CPU wheels for these).
+  - `_check_platform`: `runs_local=True` covers RLCD via the existing Linux/macOS/Windows x86_64/arm64 check (onnxruntime ships CPU wheels for these). Parameterize the failure fix text per backend so RLCD never prints Needle's message, e.g. derive it from the definition name:
+
+```python
+fix = (
+    f"{backend} supports Linux, macOS, and Windows on x86_64 and arm64. "
+    "Use the typesafe or simple-jev backend on this platform."
+)
+```
+
+  (Apply the same parameterization to Needle's existing branch so both read naturally; existing Needle output text stays equivalent.)
   - `_check_cache_writable`: `runs_local=True` already runs the existing cache-parent writability check.
   - New `_check_rlcd_cache(backend)`: only when backend is `rlcd-modernbert`; calls `bruv.backends.rlcd_artifacts.cached_artifact_status()` (which imports only `huggingface_hub`, never the adapter); reports per-file name + hash status (`verified` / `hash-mismatch` / `missing`); `model.onnx` missing is a warning-style fail item with fix "run one evaluation to download artifacts"; `hash-mismatch` on any file fails with fix "delete the corrupted cache entry and retry". Never prints cache internals beyond file names and hash status. Doctor laziness is proven by tests.
 - [ ] Run checks:
@@ -724,7 +781,6 @@ Expected: pass. `bruv doctor` with backend `rlcd-modernbert` performs zero netwo
 - [ ] Commit: `feat: wire RLCD setup and lazy doctor checks`.
 
 ## Task 8: Gates and abstain-aware output
-
 - [ ] Update `src/bruv/gates.py`: when the field path targets an answer that is an `AbstainAnswer`, resolve the gate against `AbstainAnswer` fields (e.g. `answers.<id>.confidence` resolves to the abstention probability) and mark the outcome abstained so `exit_code_for` returns 11. Concretely:
 
 ```python
@@ -750,28 +806,12 @@ Expected: pass; existing gate behavior for non-abstain answers unchanged.
 
 - [ ] Commit: `feat: resolve gates against abstain answers`.
 
-## Task 9: Machine contracts and snapshots
-
-- [ ] `src/bruv/contracts/spec.py`: `BACKEND_VALUES` is registry-derived and now includes `rlcd-modernbert` automatically. Add a capability note string in the spec payload documenting RLCD probability semantics: substantive probabilities are conditional on sufficient evidence; abstained answers carry the full calibrated distribution with the reserved `__abstain__` key.
-- [ ] `src/bruv/contracts/schemas.py`: no hand edits; the output schema regenerates from `DecisionResult` (new `abstain` answer variant, widened `backend`). Update `SCHEMA_VERSION` if the project convention requires it for contract changes.
-- [ ] Regenerate snapshots from runtime-generated data, never hand-authored:
-
-```bash
-cd /root/business/PROJECTS/bruv && .venv/bin/pytest tests/contract/test_contract_snapshots.py -q --snapshot-update
-```
-
-(Use the repository's existing snapshot-update mechanism found in `tests/contract/test_contract_snapshots.py`; if none exists, follow its documented regeneration flow.)
-
-Expected: `tests/fixtures/cli/spec.json` and `tests/fixtures/cli/output.schema.json` updated; TypeSafe, Simple Jev, and Needle snapshot payloads byte-identical to before.
-
-- [ ] Commit: `chore: regenerate machine contracts for rlcd-modernbert`.
-
-## Task 10: Adapter unit tests (fake runtime, no model download)
+## Task 9: Adapter unit tests (fake runtime, no model download)
 
 - [ ] Create `tests/unit/backends/test_rlcd_modernbert.py` with a fake tokenizer + fake `RlcdRuntime`. Cover:
   - Exact prompt formatting for all three question types (template strings asserted literally, including `<<LABEL>>`/`<<SEP>>` assembly and the abstention description).
-  - Marker safety rejection is exercised at validation level (Task 12); here assert adapter surfaces validation errors before any `run` call when markers are present.
-  - K bounds: substantive counts {2,3,4,5,6,8,10,16,24} accepted for choice/score; 25+ substantive rejected before inference; K=2 total (one substantive) rejected.
+  - Marker safety rejection is exercised at validation level (Task 11); here assert adapter surfaces validation errors before any `run` call when markers are present.
+  - K bounds: substantive counts {2,3,4,5,6,8,10,16,24} accepted for choice/score; 25+ substantive rejected before inference; K=2 total (one substantive) is unreachable, not capability-rejected: `ChoiceQuestion`/`ScoreQuestion` enforce a minimum of 2 criteria, so the test asserts request construction raises a pydantic `ValidationError`.
   - Batched single run: exactly one `run` call per `evaluate()` regardless of question count.
   - Full result mapping: choice/score/noul substantive wins (renormalized substantive maps, no `__abstain__` key in substantive maps), abstention win (`AbstainAnswer` with full distribution, `probabilities["__abstain__"] == confidence`, legend present for choice/score, absent for noul), sentinel normalization (`__insufficient_evidence__` never escapes).
   - Metadata: `temperature_path=f"per_k:{K}"`, revision, calibration scope, probability base.
@@ -789,7 +829,7 @@ Expected: all pass.
 
 - [ ] Commit: `test: cover RLCD adapter, calibration, and artifacts`.
 
-## Task 11: `AbstainAnswer` contract tests
+## Task 10: `AbstainAnswer` contract tests
 
 - [ ] Create `tests/contract/test_abstain_contract.py`:
   - Probability-backed validation: confidence + probabilities required together, finite [0,1], sum 1.0 within `PROBABILITY_SUM_ABS_TOLERANCE`, reserved `__abstain__` key present and equal to confidence.
@@ -808,12 +848,12 @@ Expected: all pass.
 
 - [ ] Commit: `test: cover abstain answer contract`.
 
-## Task 12: Capability metadata and validation tests
+## Task 11: Capability metadata and validation tests
 
 - [ ] Create `tests/contract/test_rlcd_contract.py` and extend `tests/unit/domain/test_validation.py`:
   - Metadata-driven marker rejection: a choice option description, score level description, noul proposition, or state text containing `<<LABEL>>` or `<<SEP>>` yields `reserved_input_marker` issues for `rlcd-modernbert` only; the same request is valid for `typesafe`/`simple-jev`/`needle` (default metadata unchanged).
   - Candidate limits: choice with 25 options rejected; 24 accepted; noul always valid; counts derived from `supported_total_candidates`, not backend names.
-  - Reserved answer IDs: choice option named `__abstain__` or score level ID `__abstain__` rejected only for backends declaring `reserved_answer_ids`; allowed (as today) for other backends.
+  - Reserved answer IDs: choice option named `__abstain__` rejected only for backends declaring `reserved_answer_ids`; allowed (as today) for other backends. Score level IDs are adapter-owned string indices and cannot collide, so assert no reserved-answer-ID issue is ever produced for score questions.
   - Validation happens before inference: adapter fake runtime asserts `run` never called when validation fails.
 - [ ] Run:
 
@@ -825,7 +865,7 @@ Expected: all pass.
 
 - [ ] Commit: `test: cover capability metadata validation`.
 
-## Task 13: Doctor, setup, registry, CLI integration tests
+## Task 12: Doctor, setup, registry, CLI integration tests
 
 - [ ] Extend `tests/unit/onboarding/test_doctor.py` and `tests/integration/test_setup_doctor.py`:
   - Doctor for `rlcd-modernbert` never downloads, never imports `bruv.backends.rlcd_modernbert`, never constructs the adapter, never creates an ONNX session, never loads the model (assert via monkeypatch import sentinel on `bruv.backends.rlcd_modernbert`).
@@ -844,7 +884,7 @@ Expected: all pass.
 
 - [ ] Commit: `test: verify RLCD onboarding and CLI contracts`.
 
-## Task 14: Packaging, docs, real smoke, full verification
+## Task 13: Packaging, docs, real smoke, full verification
 
 - [ ] Recreate venv with the extra and verify packaging isolation:
 
