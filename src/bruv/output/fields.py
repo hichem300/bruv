@@ -94,6 +94,13 @@ def _step_into_answer(current: Any, part: str, walked: list[str]) -> Any:
             raise FieldError(f"answer has no field '{part}' in '{path_so_far}'")
         return getattr(current, part)
 
+    if len(walked) == 4 and walked[2] in {"probabilities", "legend"}:
+        if not isinstance(current, dict):
+            raise FieldError(f"'{walked[2]}' is not a mapping at '{path_so_far}'")
+        if part not in current:
+            raise FieldError(f"no key '{part}' in '{path_so_far}'")
+        return current[part]
+
     raise FieldError(f"answer field path too deep at '{path_so_far}'")
 
 
