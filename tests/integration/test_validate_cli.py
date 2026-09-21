@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -65,6 +66,23 @@ def test_validate_json_output(tmp_path: Path) -> None:
     result = runner.invoke(app, ["validate", "-f", str(path), "--output", "json"])
     assert result.exit_code == 0
     assert result.stdout.strip() == "valid"
+
+
+def test_validate_needle_stays_lazy(tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "eval.json"
+    path.write_text(json.dumps(_eval_payload()), encoding="utf-8")
+    sys.modules.pop("needle", None)
+    original_import = __import__
+
+    def guarded_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "needle" or name.startswith("needle."):
+            raise AssertionError("optional needle package imported")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", guarded_import)
+    result = runner.invoke(app, ["validate", "-f", str(path), "--backend", "needle"])
+    assert result.exit_code == 0
+    assert "valid" in result.stdout
 
 
 def test_validate_makes_no_backend_call(tmp_path: Path) -> None:

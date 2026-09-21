@@ -17,6 +17,19 @@ def test_default_backend_is_typesafe() -> None:
     config = load_config(env={}, path=type("P", (), {"is_file": lambda self: False})())
     assert config.backend == "typesafe"
     assert config.output == "human"
+    assert config.needle_model == "Cactus-Compute/needle3"
+
+
+def test_file_config_sets_needle_model(tmp_path) -> None:
+    cfg = tmp_path / "bruv.toml"
+    write_config(cfg, 'needle_model = "custom-needle"\n')
+    config = load_config(env={}, path=cfg)
+    assert config.needle_model == "custom-needle"
+
+
+def test_needle_model_must_be_nonblank() -> None:
+    with pytest.raises(ValidationError, match="needle_model must not be blank"):
+        AppConfig(needle_model="   ")
 
 
 def test_file_config_sets_backend(tmp_path) -> None:

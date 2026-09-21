@@ -95,6 +95,21 @@ def test_needle_construction_uses_generic_selected_dependency_override() -> None
     assert backend._runtime is runtime
 
 
+def test_needle_builder_passes_configured_model_without_running_inference() -> None:
+    class FakeRuntime:
+        def classify(self, **_kwargs: object) -> NeedleSelection:
+            raise AssertionError("inference must not run")
+
+    with pytest.raises(ConfigurationError, match="base Needle 3 model"):
+        create_registered_backend(
+            BackendBuildContext(
+                config=AppConfig(backend="needle", needle_model="unsupported"),
+                credentials=Credentials(),
+                selected_dependency_factory=lambda config, credentials: FakeRuntime(),
+            )
+        )
+
+
 def test_listing_config_and_spec_do_not_import_optional_needle_package(
     monkeypatch, tmp_path
 ) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -113,6 +114,24 @@ def test_dry_run_makes_no_backend_call(fake_backend) -> None:
     assert fake_backend.calls == 0
     payload = json.loads(result.stdout)
     assert payload["dry_run"] is True
+
+
+def test_needle_dry_run_stays_lazy(monkeypatch) -> None:
+    sys.modules.pop("needle", None)
+    original_import = __import__
+
+    def guarded_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "needle" or name.startswith("needle."):
+            raise AssertionError("optional needle package imported")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", guarded_import)
+    result = runner.invoke(
+        app,
+        ["noul", "Decide?", "--state", "context", "--backend", "needle", "--dry-run"],
+    )
+    assert result.exit_code == 0
+    assert json.loads(result.stdout)["backend"] == "needle"
 
 
 def test_missing_state_exits_two(fake_backend) -> None:

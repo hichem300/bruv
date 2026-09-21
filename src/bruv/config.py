@@ -25,6 +25,7 @@ class AppConfig(BaseModel):
     typesafe_model: str | None = "jev-latest"
     simple_jev_base_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:8000")
     simple_jev_model: str = "Qwen/Qwen3.5-0.8B"
+    needle_model: str = "Cactus-Compute/needle3"
     request_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     output: Literal["human", "json"] = "human"
 
@@ -36,6 +37,13 @@ class AppConfig(BaseModel):
         if value not in backend_names:
             supported = ", ".join(repr(name) for name in backend_names)
             raise ValueError(f"backend must be one of: {supported}")
+        return value
+
+    @field_validator("needle_model")
+    @classmethod
+    def _nonblank_needle_model(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("needle_model must not be blank")
         return value
 
 

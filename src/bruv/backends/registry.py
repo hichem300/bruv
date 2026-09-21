@@ -105,7 +105,7 @@ def _build_needle(context: BackendBuildContext) -> DecisionBackend:
 
     dependency = context.selected_dependency()
     runtime = cast(NeedleRuntime, dependency) if dependency is not None else CactusNeedleRuntime()
-    return NeedleAdapter(runtime)
+    return NeedleAdapter(runtime, model=context.config.needle_model)
 
 
 def _default_simple_jev_client(config: AppConfig) -> httpx.Client:
