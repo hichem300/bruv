@@ -78,6 +78,12 @@ _LOGITS_ACTION = "Re-run the evaluation or check the RLCD model output."
 _SUPPORTED_TOTAL_CANDIDATES = frozenset({2, 3, 4, 5, 6, 7, 9, 11, 17, 25})
 
 
+def _validate_pins(model: str, revision: str) -> None:
+    """Fail closed on any unpinned model/revision before any artifact work."""
+    if model != REPO_ID or revision != REVISION:
+        raise _unsupported_model_error()
+
+
 def _dependency_error() -> ConfigurationError:
     return ConfigurationError(
         message="RLCD support requires the optional rlcd-modernbert extra.",
@@ -455,8 +461,7 @@ class RlcdModernBertAdapter(DecisionBackend):
         model: str = REPO_ID,
         revision: str = REVISION,
     ) -> None:
-        if model != REPO_ID or revision != REVISION:
-            raise _unsupported_model_error()
+        _validate_pins(model, revision)
         self._runtime = runtime
         self._tokenizer = tokenizer
         self._calibrator = calibrator
@@ -532,8 +537,16 @@ class RlcdModernBertAdapter(DecisionBackend):
         )
 
 
-def build_adapter() -> RlcdModernBertAdapter:
-    """Construct the real RLCD adapter from pinned, verified artifacts."""
+def build_adapter(
+    model: str = REPO_ID,
+    revision: str = REVISION,
+) -> RlcdModernBertAdapter:
+    """Construct the real RLCD adapter from pinned, verified artifacts.
+
+    The model/revision pins are validated before ``ensure_artifacts`` runs, so
+    an unpinned selection fails closed without any download or runtime work.
+    """
+    _validate_pins(model, revision)
     artifacts = ensure_artifacts()
     calibrator = load_calibrator(artifacts["calibrator.json"])
     runtime = OnnxRlcdRuntime(artifacts["model.onnx"])
@@ -541,7 +554,13 @@ def build_adapter() -> RlcdModernBertAdapter:
         artifacts["tokenizer.json"],
         artifacts["tokenizer_config.json"],
     )
-    return RlcdModernBertAdapter(runtime=runtime, tokenizer=tokenizer, calibrator=calibrator)
+    return RlcdModernBertAdapter(
+        runtime=runtime,
+        tokenizer=tokenizer,
+        calibrator=calibrator,
+        model=model,
+        revision=revision,
+    )
 
 
 __all__ = [

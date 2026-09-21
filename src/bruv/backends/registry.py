@@ -44,6 +44,7 @@ class BackendDefinition:
     needs_credentials: bool = False
     runs_local: bool = False
     optional_module: str | None = None
+    runtime_packages: tuple[str, ...] = ()
 
 
 class _BackendRegistry:
@@ -108,6 +109,12 @@ def _build_needle(context: BackendBuildContext) -> DecisionBackend:
     dependency = context.selected_dependency()
     runtime = cast(NeedleRuntime, dependency) if dependency is not None else CactusNeedleRuntime()
     return NeedleAdapter(runtime, model=context.config.needle_model)
+
+
+def _build_rlcd_modernbert(context: BackendBuildContext) -> DecisionBackend:
+    from bruv.backends.rlcd_modernbert import build_adapter
+
+    return build_adapter(model=context.config.rlcd_model, revision=context.config.rlcd_revision)
 
 
 def _default_simple_jev_client(config: AppConfig) -> httpx.Client:
@@ -182,6 +189,27 @@ _REGISTRY = _BackendRegistry(
             install_hint="Install Needle support with: pip install 'bruv[needle]'",
             runs_local=True,
             optional_module="needle",
+        ),
+        BackendDefinition(
+            name="rlcd-modernbert",
+            capabilities=BackendCapabilities(
+                backend="rlcd-modernbert",
+                question_types=frozenset({"noul", "choice", "score"}),
+                calibrated=True,
+                allows_json_state=True,
+                explicit_abstention=True,
+                supported_total_candidates=frozenset({2, 3, 4, 5, 6, 7, 9, 11, 17, 25}),
+                reserved_input_markers=("<<LABEL>>", "<<SEP>>"),
+                reserved_answer_ids=frozenset({"__abstain__"}),
+            ),
+            build=_build_rlcd_modernbert,
+            setup_description=(
+                "local RLCD ModernBERT, calibrated, ~606 MB first-use HF download, "
+                "local/free inference."
+            ),
+            install_hint="Install RLCD support with: pip install 'bruv[rlcd-modernbert]'",
+            runs_local=True,
+            runtime_packages=("onnxruntime", "tokenizers", "numpy", "huggingface_hub"),
         ),
     )
 )

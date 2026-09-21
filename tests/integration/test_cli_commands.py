@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 from bruv.cli import app
 from bruv.domain.results import ChoiceAnswer, DecisionResult, NoulAnswer
+from bruv.domain.validation import BackendCapabilities
 
 runner = CliRunner()
 
@@ -32,16 +33,12 @@ def _fake_result() -> DecisionResult:
 
 
 class _FakeBackend:
-    capabilities = type(
-        "C",
-        (),
-        {
-            "backend": "simple-jev",
-            "question_types": frozenset({"noul", "choice", "score"}),
-            "calibrated": False,
-            "allows_json_state": True,
-        },
-    )()
+    capabilities = BackendCapabilities(
+        backend="simple-jev",
+        question_types=frozenset({"noul", "choice", "score"}),
+        calibrated=False,
+        allows_json_state=True,
+    )
 
     def __init__(self) -> None:
         self.calls = 0
@@ -144,16 +141,12 @@ def test_needle_json_output_serializes_confidence_only(monkeypatch) -> None:
     )
 
     class _NeedleBackend:
-        capabilities = type(
-            "C",
-            (),
-            {
-                "backend": "needle",
-                "question_types": frozenset({"noul", "choice", "score"}),
-                "calibrated": True,
-                "allows_json_state": True,
-            },
-        )()
+        capabilities = BackendCapabilities(
+            backend="needle",
+            question_types=frozenset({"noul", "choice", "score"}),
+            calibrated=True,
+            allows_json_state=True,
+        )
 
         def evaluate(self, request: object) -> DecisionResult:
             return needle_result

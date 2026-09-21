@@ -20,6 +20,12 @@ dependencies = [
 
 [project.optional-dependencies]
 needle = ["cactus-needle>=3.0,<4"]
+rlcd-modernbert = [
+  "numpy>=1.26,<3",
+  "onnxruntime>=1.17,<2",
+  "tokenizers>=0.19,<1",
+  "huggingface_hub>=0.23,<2",
+]
 dev = [
   "build>=1.2,<2",
   "mypy>=1.14,<2",

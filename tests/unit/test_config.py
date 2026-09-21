@@ -18,6 +18,15 @@ def test_default_backend_is_typesafe() -> None:
     assert config.backend == "typesafe"
     assert config.output == "human"
     assert config.needle_model == "Cactus-Compute/needle3"
+    assert config.rlcd_model == "heman10x/rlcd-modernbert-151m"
+    assert config.rlcd_revision == "8af2496eb63c7fa66d7d234e1f62629380030eb4"
+
+
+def test_rlcd_fields_must_be_nonblank() -> None:
+    with pytest.raises(ValidationError, match="rlcd_model"):
+        AppConfig(rlcd_model="   ")
+    with pytest.raises(ValidationError, match="rlcd_revision"):
+        AppConfig(rlcd_revision=" ")
 
 
 def test_file_config_sets_needle_model(tmp_path) -> None:

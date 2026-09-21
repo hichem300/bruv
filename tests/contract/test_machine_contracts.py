@@ -63,6 +63,24 @@ def test_spec_backends_include_needle() -> None:
     assert "needle" in payload["backends"]
 
 
+def test_spec_backends_include_rlcd_and_capability_note() -> None:
+    result = runner.invoke(app, ["spec", "--output", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert "rlcd-modernbert" in payload["backends"]
+    note = payload["backend_capability_note"]
+    assert "conditional on sufficient evidence" in note
+    assert "__abstain__" in note
+
+
+def test_output_schema_advertises_abstain_answer() -> None:
+    result = runner.invoke(app, ["schema", "output"])
+    assert result.exit_code == 0
+    schema = json.loads(result.stdout)
+    assert schema["properties"]["backend"]["type"] == "string"
+    assert "AbstainAnswer" in schema["$defs"]
+
+
 def test_output_schema_advertises_needle_and_relaxed_confidence_only_fields() -> None:
     result = runner.invoke(app, ["schema", "output"])
     assert result.exit_code == 0

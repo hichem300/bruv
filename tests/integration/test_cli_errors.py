@@ -10,21 +10,18 @@ from typer.testing import CliRunner
 from bruv.application import AuthenticationError, ProviderResponseError
 from bruv.cli import app
 from bruv.domain.results import DecisionResult
+from bruv.domain.validation import BackendCapabilities
 
 runner = CliRunner()
 
 
 class _ErrorBackend:
-    capabilities = type(
-        "C",
-        (),
-        {
-            "backend": "typesafe",
-            "question_types": frozenset({"noul", "choice", "score"}),
-            "calibrated": True,
-            "allows_json_state": True,
-        },
-    )()
+    capabilities = BackendCapabilities(
+        backend="typesafe",
+        question_types=frozenset({"noul", "choice", "score"}),
+        calibrated=True,
+        allows_json_state=True,
+    )
 
     def __init__(self, error: Exception) -> None:
         self._error = error

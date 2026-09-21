@@ -8,6 +8,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from bruv.cli import app
+from bruv.domain.validation import BackendCapabilities
 
 runner = CliRunner()
 
@@ -45,16 +46,12 @@ def test_execute_runs_backend(tmp_path: Path, monkeypatch) -> None:
 
     def _create_backend(config, credentials, *, client_factory=None):
         class B:
-            capabilities = type(
-                "C",
-                (),
-                {
-                    "backend": "simple-jev",
-                    "question_types": frozenset({"noul", "choice", "score"}),
-                    "calibrated": False,
-                    "allows_json_state": True,
-                },
-            )()
+            capabilities = BackendCapabilities(
+                backend="simple-jev",
+                question_types=frozenset({"noul", "choice", "score"}),
+                calibrated=False,
+                allows_json_state=True,
+            )
 
             def evaluate(self, request: object) -> DecisionResult:
                 return DecisionResult(

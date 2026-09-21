@@ -1,8 +1,10 @@
 {
+    "backend_capability_note": "Backend capabilities are derived from the backend registry. Substantive answer probabilities are conditional on sufficient evidence; abstained answers carry the full calibrated probability map including __abstain__.",
     "backends": [
         "typesafe",
         "simple-jev",
-        "needle"
+        "needle",
+        "rlcd-modernbert"
     ],
     "commands": [
         {

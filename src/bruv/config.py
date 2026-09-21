@@ -26,6 +26,8 @@ class AppConfig(BaseModel):
     simple_jev_base_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:8000")
     simple_jev_model: str = "Qwen/Qwen3.5-0.8B"
     needle_model: str = "Cactus-Compute/needle3"
+    rlcd_model: str = "heman10x/rlcd-modernbert-151m"
+    rlcd_revision: str = "8af2496eb63c7fa66d7d234e1f62629380030eb4"
     request_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     output: Literal["human", "json"] = "human"
 
@@ -44,6 +46,13 @@ class AppConfig(BaseModel):
     def _nonblank_needle_model(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("needle_model must not be blank")
+        return value
+
+    @field_validator("rlcd_model", "rlcd_revision")
+    @classmethod
+    def _nonblank_rlcd_fields(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("rlcd model fields must not be blank")
         return value
 
 

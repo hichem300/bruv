@@ -89,6 +89,12 @@ PAID_REQUEST_SEMANTICS = (
     "schema, spec, help/version, doctor, and dry-run never incur a paid request."
 )
 
+BACKEND_CAPABILITY_NOTE = (
+    "Backend capabilities are derived from the backend registry. Substantive "
+    "answer probabilities are conditional on sufficient evidence; abstained "
+    "answers carry the full calibrated probability map including __abstain__."
+)
+
 
 def spec() -> dict[str, Any]:
     """Return the full CLI command spec from one data source."""
@@ -100,7 +106,8 @@ def spec() -> dict[str, Any]:
         "output_modes": OUTPUT_MODES,
         "exit_codes": EXIT_CODES,
         "paid_request_semantics": PAID_REQUEST_SEMANTICS,
+        "backend_capability_note": BACKEND_CAPABILITY_NOTE,
     }
 
 
-__all__ = ["spec"]
+__all__ = ["BACKEND_CAPABILITY_NOTE", "BACKEND_VALUES", "spec"]
