@@ -58,8 +58,9 @@ class NoulAnswer(CanonicalModel):
         selection_mode = (
             self.noul is None and self.value is not None and self.confidence is not None
         )
-        if not (probability_mode or selection_mode):
-            raise ValueError("noul answer must contain either noul or both value and confidence")
+        value_only_mode = self.noul is None and self.value is not None and self.confidence is None
+        if not (probability_mode or selection_mode or value_only_mode):
+            raise ValueError("noul answer must contain noul, value with confidence, or value only")
         return self
 
     @model_serializer(mode="wrap")
@@ -70,13 +71,17 @@ class NoulAnswer(CanonicalModel):
             serialized.pop("confidence", None)
         else:
             serialized.pop("noul", None)
+            if self.confidence is None:
+                serialized.pop("confidence", None)
+            if self.value is None:
+                serialized.pop("value", None)
         return serialized
 
 
 class ChoiceAnswer(CanonicalModel):
     type: Literal["choice"] = "choice"
     choice: NonBlankString
-    confidence: Probability
+    confidence: Probability | None = None
     probabilities: (
         Annotated[
             dict[NonBlankString, Probability],
@@ -88,6 +93,8 @@ class ChoiceAnswer(CanonicalModel):
     @model_validator(mode="after")
     def validate_probability_distribution(self) -> ChoiceAnswer:
         if self.probabilities is not None:
+            if self.confidence is None:
+                raise ValueError("choice answer requires confidence when probabilities are present")
             if self.choice not in self.probabilities:
                 raise ValueError("choice must have a matching probability")
             _validate_probability_distribution(self.probabilities)
@@ -96,6 +103,8 @@ class ChoiceAnswer(CanonicalModel):
     @model_serializer(mode="wrap")
     def serialize_answer(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         serialized = cast(dict[str, Any], handler(self))
+        if self.confidence is None:
+            serialized.pop("confidence", None)
         if self.probabilities is None:
             serialized.pop("probabilities", None)
         return serialized
@@ -104,7 +113,7 @@ class ChoiceAnswer(CanonicalModel):
 class ScoreAnswer(CanonicalModel):
     type: Literal["score"] = "score"
     score: FiniteFloat
-    confidence: Probability
+    confidence: Probability | None = None
     legend: Annotated[dict[NonBlankString, JsonValue], Field(min_length=1)]
     probabilities: (
         Annotated[
@@ -122,6 +131,8 @@ class ScoreAnswer(CanonicalModel):
     @model_validator(mode="after")
     def validate_probability_distribution(self) -> ScoreAnswer:
         if self.probabilities is not None:
+            if self.confidence is None:
+                raise ValueError("score answer requires confidence when probabilities are present")
             if self.legend.keys() != self.probabilities.keys():
                 raise ValueError("legend and probabilities must have identical keys")
             _validate_probability_distribution(self.probabilities)
@@ -130,6 +141,8 @@ class ScoreAnswer(CanonicalModel):
     @model_serializer(mode="wrap")
     def serialize_answer(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         serialized = cast(dict[str, Any], handler(self))
+        if self.confidence is None:
+            serialized.pop("confidence", None)
         if self.probabilities is None:
             serialized.pop("probabilities", None)
         return serialized

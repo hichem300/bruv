@@ -28,22 +28,24 @@ def render_human_result(result: DecisionResult) -> str:
         if isinstance(answer, NoulAnswer):
             if answer.noul is not None:
                 lines.append(f"{question_id}: {answer.noul:.3f}")
-            else:
+            elif answer.confidence is not None:
                 lines.append(
                     f"{question_id}: {str(answer.value).lower()} "
                     f"(confidence: {answer.confidence:.3f})"
                 )
+            else:
+                lines.append(f"{question_id}: {str(answer.value).lower()}")
         elif isinstance(answer, ChoiceAnswer):
             suffix = (
                 ""
-                if answer.probabilities is not None
+                if answer.confidence is None or answer.probabilities is not None
                 else f" (confidence: {answer.confidence:.3f})"
             )
             lines.append(f"{question_id}: {answer.choice}{suffix}")
         elif isinstance(answer, ScoreAnswer):
             suffix = (
                 ""
-                if answer.probabilities is not None
+                if answer.confidence is None or answer.probabilities is not None
                 else f" (confidence: {answer.confidence:.3f})"
             )
             lines.append(f"{question_id}: {answer.score:.3f}{suffix}")

@@ -91,10 +91,18 @@
                     "type": "string"
                 },
                 "confidence": {
-                    "maximum": 1.0,
-                    "minimum": 0.0,
-                    "title": "Confidence",
-                    "type": "number"
+                    "anyOf": [
+                        {
+                            "maximum": 1.0,
+                            "minimum": 0.0,
+                            "type": "number"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Confidence"
                 },
                 "probabilities": {
                     "anyOf": [
@@ -122,8 +130,7 @@
                 }
             },
             "required": [
-                "choice",
-                "confidence"
+                "choice"
             ],
             "title": "ChoiceAnswer",
             "type": "object"
@@ -186,10 +193,18 @@
             "additionalProperties": false,
             "properties": {
                 "confidence": {
-                    "maximum": 1.0,
-                    "minimum": 0.0,
-                    "title": "Confidence",
-                    "type": "number"
+                    "anyOf": [
+                        {
+                            "maximum": 1.0,
+                            "minimum": 0.0,
+                            "type": "number"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Confidence"
                 },
                 "legend": {
                     "additionalProperties": {
@@ -230,7 +245,6 @@
             },
             "required": [
                 "score",
-                "confidence",
                 "legend"
             ],
             "title": "ScoreAnswer",

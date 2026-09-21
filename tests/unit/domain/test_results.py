@@ -112,7 +112,6 @@ def test_noul_probability_must_be_finite_and_bounded(value: float) -> None:
     "payload",
     [
         {},
-        {"value": True},
         {"confidence": 0.9},
         {"noul": 0.9, "value": True},
         {"noul": 0.9, "confidence": 0.9},
@@ -120,8 +119,68 @@ def test_noul_probability_must_be_finite_and_bounded(value: float) -> None:
     ],
 )
 def test_noul_rejects_empty_partial_and_mixed_modes(payload: dict[str, object]) -> None:
-    with pytest.raises(ValidationError, match="either noul or both value and confidence"):
+    with pytest.raises(ValidationError, match="noul, value with confidence, or value only"):
         NoulAnswer(**payload)  # type: ignore[arg-type]
+
+
+def test_noul_value_only_mode_round_trips() -> None:
+    answer = NoulAnswer(value=False)
+    expected = {"type": "noul", "value": False}
+
+    assert answer.model_dump() == expected
+    assert json.loads(answer.model_dump_json()) == expected
+    assert NoulAnswer.model_validate(expected) == answer
+
+
+def test_choice_and_score_support_label_only_mode() -> None:
+    choice = ChoiceAnswer(choice="billing")
+    score = ScoreAnswer(score=1.5, legend={"0": "low", "1": "high"})
+
+    assert choice.confidence is None
+    assert score.confidence is None
+    assert choice.model_dump() == {"type": "choice", "choice": "billing"}
+    assert score.model_dump() == {
+        "type": "score",
+        "score": 1.5,
+        "legend": {"0": "low", "1": "high"},
+    }
+    assert ChoiceAnswer.model_validate({"type": "choice", "choice": "billing"}) == choice
+    assert (
+        ScoreAnswer.model_validate(
+            {"type": "score", "score": 1.5, "legend": {"0": "low", "1": "high"}}
+        )
+        == score
+    )
+
+
+def test_confidence_only_mode_round_trips_without_probabilities() -> None:
+    choice = ChoiceAnswer(choice="billing", confidence=0.8)
+    score = ScoreAnswer(
+        score=2.0,
+        confidence=0.7,
+        legend={"0": "low", "1": "medium", "2": "high"},
+    )
+
+    assert choice.probabilities is None
+    assert score.probabilities is None
+    assert choice.model_dump() == {"type": "choice", "choice": "billing", "confidence": 0.8}
+    assert score.model_dump() == {
+        "type": "score",
+        "score": 2.0,
+        "confidence": 0.7,
+        "legend": {"0": "low", "1": "medium", "2": "high"},
+    }
+
+
+def test_probabilities_without_confidence_are_rejected() -> None:
+    with pytest.raises(ValidationError, match="confidence when probabilities are present"):
+        ChoiceAnswer(choice="billing", probabilities={"billing": 1.0})
+    with pytest.raises(ValidationError, match="confidence when probabilities are present"):
+        ScoreAnswer(
+            score=0.5,
+            legend={"0": "low", "1": "high"},
+            probabilities={"0": 0.5, "1": 0.5},
+        )
 
 
 @pytest.mark.parametrize("value", [-0.01, 1.01, float("nan"), float("-inf")])
