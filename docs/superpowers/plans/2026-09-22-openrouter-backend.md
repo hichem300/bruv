@@ -72,7 +72,7 @@ No commit (verification only).
 
 ## Task 2: Label-only substantive answer modes
 
-- [ ] Make `ChoiceAnswer.confidence` and `ScoreAnswer.confidence` optional in `src/bruv/domain/results.py`; enforce exactly one mode; keep serializers omitting inactive fields only.
+- [ ] Make `ChoiceAnswer.confidence` and `ScoreAnswer.confidence` optional in `src/bruv/domain/results.py`; support label-only, confidence-only, and probability-backed modes while rejecting probabilities without confidence; keep serializers omitting inactive fields only.
 
 ```python
 class ChoiceAnswer(CanonicalModel):
@@ -83,12 +83,8 @@ class ChoiceAnswer(CanonicalModel):
 
     @model_validator(mode="after")
     def validate_answer_mode(self) -> ChoiceAnswer:
-        probability_mode = self.confidence is not None and self.probabilities is not None
-        label_only_mode = self.confidence is None and self.probabilities is None
-        if not (probability_mode or label_only_mode):
-            raise ValueError(
-                "choice answer requires confidence and probabilities together, or neither"
-            )
+        if self.confidence is None and self.probabilities is not None:
+            raise ValueError("choice probabilities require confidence")
         if self.probabilities is not None:
             if self.choice not in self.probabilities:
                 raise ValueError("choice must have a matching probability")
@@ -105,7 +101,7 @@ class ChoiceAnswer(CanonicalModel):
         return serialized
 ```
 
-`ScoreAnswer` mirrors this exactly: `confidence: Probability | None = None`; the mode validator requires confidence and probabilities together or both absent; when `probabilities` is present, legend keys must equal probability keys and the distribution check runs; the serializer pops `confidence` when `None` in addition to the existing `probabilities` pop.
+`ScoreAnswer` mirrors this exactly: `confidence: Probability | None = None`; label-only, confidence-only (used by Needle), and probability-backed modes are valid, while probabilities without confidence are rejected. When `probabilities` is present, legend keys must equal probability keys and the distribution check runs; the serializer pops `confidence` when `None` in addition to the existing `probabilities` pop.
 
 - [ ] Add the `NoulAnswer` value-only mode; preserve probability mode and value-plus-confidence selection mode.
 
@@ -122,7 +118,7 @@ def validate_answer_mode(self) -> NoulAnswer:
 
 The existing `NoulAnswer` serializer already pops inactive fields; verify it pops `confidence` when `None` in the value-only mode and extend it if not.
 
-- [ ] Run behavior verification with existing suites (byte-compatibility proof, no new tests yet):
+- [ ] Run behavior verification with existing suites and regenerate only `tests/fixtures/cli/output.schema.json` for the intentional optional-confidence schema relaxation:
 
 ```bash
 cd /root/business/PROJECTS/bruv
@@ -130,7 +126,7 @@ cd /root/business/PROJECTS/bruv
 .venv/bin/python -m pytest tests/unit -q
 ```
 
-Expected: all pass unchanged. TypeSafe, Simple Jev, Needle, and RLCD payloads stay byte-identical because those backends still supply their current fields; serializers omit only inactive fields. If any existing test asserts the exact old `NoulAnswer`/`ChoiceAnswer`/`ScoreAnswer` mode error text, update only the asserted message to the new wording; behavior assertions stay unchanged.
+Expected: existing TypeSafe, Simple Jev, Needle, and RLCD result payloads stay byte-identical; Needle's confidence-only Choice and Score answers remain valid. The output-schema snapshot changes only because `confidence` becomes optional. Serializers omit only inactive fields. If an existing test asserts the exact old mode error text, update only that message while preserving behavior assertions.
 
 Commit: `feat: label-only canonical answer modes`
 
