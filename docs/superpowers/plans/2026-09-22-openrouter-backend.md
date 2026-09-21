@@ -386,12 +386,6 @@ def _question_schema(question: Any) -> dict[str, Any]:
         },
         "required": ["selection"],
         "additionalProperties": False,
-        "allOf": [
-            {
-                "if": {"properties": {"selection": {"const": ABSTAIN_ID}}},
-                "then": {"required": ["abstain_reason"]},
-            }
-        ],
     }
 
 
@@ -413,6 +407,8 @@ def _response_format(request: DecisionRequest) -> dict[str, Any]:
         },
     }
 ```
+
+`abstain_reason` stays optional in the JSON Schema (no `allOf`/`if/then`): the adapter parser enforces the exact pairing instead. Abstain without a valid `abstain_reason`, or an `abstain_reason` beside a substantive selection, both fail in `_to_answers` (Task 7); Task 13 asserts the request schema contains no conditional keywords and that the parser enforces the pairing.
 
 - [ ] Add score-level derivation and the user content builder:
 
@@ -443,12 +439,35 @@ def _json_text(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
+def _question_brief(question: Any) -> str:
+    """Render actual candidate IDs with descriptions or score values."""
+    if isinstance(question, NoulQuestion):
+        return "candidates: true, false"
+    if isinstance(question, ChoiceQuestion):
+        options = "; ".join(
+            f"{option_id}: {_json_text(description)}"
+            for option_id, description in question.criteria.items()
+        )
+        return f"candidates: {options}"
+    if isinstance(question, ScoreQuestion):
+        levels = "; ".join(
+            f"{level_id}: {_json_text(value)}" for level_id, value in _score_levels(question)
+        )
+        return f"levels: {levels}"
+    raise TypeError(f"unsupported question type: {type(question).__name__}")
+
+
 def _user_content(request: DecisionRequest) -> str:
     parts = [f"State:\n{_json_text(request.state)}"]
     for question_id, question in request.questions.items():
-        parts.append(f"Question {question_id} ({question.type}): {question.instructions}")
+        parts.append(
+            f"Question {question_id} ({question.type}): {question.instructions}\n"
+            f"{_question_brief(question)}"
+        )
     return "\n\n".join(parts)
 ```
+
+`_question_brief` reuses the same helpers as the schema builder (`question.criteria` keys for choice, `_score_levels` for score), so prompt text, enum identifiers, and the score legend stay consistent; descriptions and instructions never alter enum identifiers.
 
 - [ ] Add the request body with privacy defaults and provider routing:
 
@@ -702,12 +721,19 @@ class OpenRouterAdapter:
         }
         usage = None
         if parsed.usage_payload is not None:
-            usage = _USAGE_ADAPTER.validate_python(
-                {
-                    "input_tokens": parsed.usage_payload.get("prompt_tokens"),
-                    "output_tokens": parsed.usage_payload.get("completion_tokens"),
-                }
-            )
+            try:
+                usage = _USAGE_ADAPTER.validate_python(
+                    {
+                        "input_tokens": parsed.usage_payload.get("prompt_tokens"),
+                        "output_tokens": parsed.usage_payload.get("completion_tokens"),
+                    }
+                )
+            except ValidationError as exc:
+                raise ProviderResponseError(
+                    message="OpenRouter usage payload did not match the canonical schema.",
+                    paid_request=True,
+                    action="Retry as a new request; report the response if it persists.",
+                ) from exc
             token_counts = {
                 key: parsed.usage_payload[key]
                 for key in ("prompt_tokens", "completion_tokens", "total_tokens")
@@ -738,21 +764,24 @@ class OpenRouterAdapter:
                 paid_request=False,
                 action="Check network connectivity and retry.",
             ) from exc
-        except httpx.TimeoutException as exc:
+        except httpx.ConnectError as exc:
+            raise BackendUnavailableError(
+                message="OpenRouter connection could not be established before the request was sent.",
+                paid_request=False,
+                action="Check network connectivity and DNS resolution and retry.",
+            ) from exc
+        except httpx.TransportError as exc:
+            # All remaining transport failures (ReadTimeout, ReadError, TLS
+            # failures after connect): send state is not knowable, so
+            # paid_request stays conservatively true.
             raise ProviderResponseError(
-                message="OpenRouter did not respond before the timeout; the request may have been processed.",
+                message="OpenRouter transport failed; the request may already have been sent.",
                 paid_request=True,
                 action="Retry as a new request; never assume the first request was free.",
             ) from exc
-        except httpx.NetworkError as exc:
-            raise BackendUnavailableError(
-                message="OpenRouter could not be reached.",
-                paid_request=False,
-                action="Check network connectivity and retry.",
-            ) from exc
 ```
 
-Note `Usage` fields are `input_tokens`/`output_tokens` (`NonNegativeInt | None`), so a missing side maps to `None` naturally; `validate_python` failure raises `ValidationError` — wrap it into `ProviderResponseError` with `paid_request=True` like Simple Jev does.
+Note `Usage` fields are `input_tokens`/`output_tokens` (`NonNegativeInt | None`), so a missing side maps to `None` naturally; a `ValidationError` from `_USAGE_ADAPTER` (negative or non-integer token counts) is wrapped into `ProviderResponseError` with `paid_request=True` as shown. Add `ValidationError` to the `pydantic` import from Task 6 (`from pydantic import TypeAdapter, ValidationError`).
 
 The resolved model travels unchanged in `body["model"]` and is recorded as `DecisionResult.model`. `request.model` overrides `configured_model` per request. Every successful answer reports `calibrated=false`; confidence and probabilities are never solicited or synthesized; reserved `__abstain__` never appears inside `ChoiceAnswer`, `ScoreAnswer`, or `NoulAnswer`.
 
@@ -1115,7 +1144,7 @@ def _adapter(transport: FakeTransport) -> OpenRouterAdapter:
     )
 ```
 
-Cover (each a small test): exact request body (`model`, `response_format` with `strict: true` and literal per-question properties with `additionalProperties: false`, `provider.require_parameters`, `data_collection="deny"`, `zdr=true`); exactly one nonstreaming POST per `evaluate()`; `Authorization: Bearer test-key` present and the key absent from metadata; precedence (`request.model` override, config fallback, `require_concrete_model` rejecting blank/padded/`openrouter/auto` in either source); label-only mappings for `noul`/`choice`/`score` with `calibrated=false` and no confidence/probabilities; strict parsing failures (fenced string content, trailing prose, extra keys, missing keys, selection outside enum, abstention without `abstain_reason`, abstain_reason with substantive selection) each raising `ProviderResponseError` with `paid_request=True` and exactly one parse attempt; schema-selected abstention preserving siblings; refusal (`message.refusal`) and `finish_reason == "content_filter"` mapping affected questions to label-only `AbstainAnswer` with canonical reasons; table-driven error mapping over statuses 400/401/402/403/408/429/502/503 plus body-level `error` override plus `httpx.ConnectTimeout`/`httpx.ReadTimeout`/`httpx.ConnectError`, asserting error class and `paid_request` per Task 8; metadata sanitation (tokens, cost when present, privacy disclosure of relaxed settings).
+Cover (each a small test): exact request body (`model`, `response_format` with `strict: true` and literal per-question properties with `additionalProperties: false`, `provider.require_parameters`, `data_collection="deny"`, `zdr=true`); exactly one nonstreaming POST per `evaluate()`; `Authorization: Bearer test-key` present and the key absent from metadata; precedence (`request.model` override, config fallback, `require_concrete_model` rejecting blank/padded/`openrouter/auto` in either source); label-only mappings for `noul`/`choice`/`score` with `calibrated=false` and no confidence/probabilities; strict parsing failures (fenced string content, trailing prose, extra keys, missing keys, selection outside enum, abstention without `abstain_reason`, abstain_reason with substantive selection) each raising `ProviderResponseError` with `paid_request=True` and exactly one parse attempt; schema-selected abstention preserving siblings; refusal (`message.refusal`) and `finish_reason == "content_filter"` mapping affected questions to label-only `AbstainAnswer` with canonical reasons; table-driven error mapping over statuses 400/401/402/403/408/429/502/503 plus body-level `error` override plus `httpx.ConnectTimeout`/`httpx.ConnectError` (knowable pre-send: `BackendUnavailableError`, `paid_request=False`) and `httpx.ReadTimeout` plus other `httpx.TransportError` failures (post-connect send state unknowable: `ProviderResponseError`, `paid_request=True`), asserting the conservative paid boundary per Task 7; invalid usage payloads (negative or non-integer token counts) wrapped as `ProviderResponseError` with `paid_request=True`; the request schema contains no `allOf`/`if/then` with `abstain_reason` optional in the schema while the parser enforces the abstain pairing; `_user_content` renders each question's actual candidate IDs with descriptions or score values; metadata sanitation (tokens, cost when present, privacy disclosure of relaxed settings).
 
 - [ ] Run: `cd /root/business/PROJECTS/bruv && .venv/bin/python -m pytest tests/unit/backends/test_openrouter.py -q` — all pass.
 
@@ -1150,7 +1179,7 @@ Commit: `docs: openrouter backend`
 
 ## Task 17: Optional paid live smoke test (opt-in only)
 
-- [ ] Register the marker in `pyproject.toml`:
+- [ ] Add `markers = ["live: opt-in tests that contact live services (deselected by default)"]` to the existing `[tool.pytest.ini_options]` table in `pyproject.toml`. Merged result (one table only; never create a duplicate table):
 
 ```toml
 [tool.pytest.ini_options]
