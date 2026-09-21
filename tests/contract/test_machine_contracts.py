@@ -81,6 +81,47 @@ def test_output_schema_advertises_abstain_answer() -> None:
     assert "AbstainAnswer" in schema["$defs"]
 
 
+def test_spec_exit_codes_map_abstained_to_eleven() -> None:
+    result = runner.invoke(app, ["spec", "--output", "json"])
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["exit_codes"]["abstained"] == 11
+
+
+def test_output_schema_backend_is_open_registry_compatible_string() -> None:
+    result = runner.invoke(app, ["schema", "output"])
+    assert result.exit_code == 0
+    schema = json.loads(result.stdout)
+    backend = schema["properties"]["backend"]
+    assert backend["type"] == "string"
+    assert "enum" not in backend
+    assert "const" not in backend
+
+
+def test_output_schema_answer_discriminator_includes_abstain() -> None:
+    result = runner.invoke(app, ["schema", "output"])
+    assert result.exit_code == 0
+    schema = json.loads(result.stdout)
+    answers = schema["properties"]["answers"]["additionalProperties"]
+    discriminator = answers["discriminator"]
+    assert discriminator["propertyName"] == "type"
+    assert "abstain" in discriminator["mapping"]
+    refs = {entry["$ref"] for entry in answers["oneOf"]}
+    assert "#/$defs/AbstainAnswer" in refs
+
+
+def test_output_schema_abstain_probability_fields_stay_optional() -> None:
+    result = runner.invoke(app, ["schema", "output"])
+    assert result.exit_code == 0
+    schema = json.loads(result.stdout)
+    abstain = schema["$defs"]["AbstainAnswer"]
+    assert abstain["properties"]["type"]["const"] == "abstain"
+    assert set(abstain["required"]) == {"reason", "source_question_type"}
+    for name in ("confidence", "probabilities", "legend"):
+        assert name in abstain["properties"]
+        assert name not in abstain["required"]
+
+
 def test_output_schema_advertises_needle_and_relaxed_confidence_only_fields() -> None:
     result = runner.invoke(app, ["schema", "output"])
     assert result.exit_code == 0
