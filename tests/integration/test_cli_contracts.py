@@ -35,6 +35,20 @@ RLCD_BACKEND = "rlcd-modernbert"
 OPTIONAL_PACKAGES = ("numpy", "onnxruntime", "tokenizers", "huggingface_hub")
 
 
+@pytest.fixture(autouse=True)
+def _neutralize_rlcd_host_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Delete host env state so tests see only explicit configuration.
+
+    Deleting ``RLCD_MODEL``/``RLCD_REVISION`` does not imply they are
+    supported configuration inputs; bruv has no env contract for them. It
+    only neutralizes stray host state. ``JEV_BACKEND`` is a real input and
+    must not leak between tests. Tests setting env intentionally afterwards
+    are unaffected.
+    """
+    for name in ("JEV_BACKEND", "RLCD_MODEL", "RLCD_REVISION"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def rlcd_lazy_import_guard(monkeypatch: pytest.MonkeyPatch):
     """Fail loudly if any optional RLCD runtime package gets imported."""
