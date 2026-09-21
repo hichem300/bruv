@@ -10,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from bruv.cli import app
-from bruv.domain.results import ChoiceAnswer, DecisionResult
+from bruv.domain.results import ChoiceAnswer, DecisionResult, NoulAnswer
 
 runner = CliRunner()
 
@@ -132,6 +132,51 @@ def test_needle_dry_run_stays_lazy(monkeypatch) -> None:
     )
     assert result.exit_code == 0
     assert json.loads(result.stdout)["backend"] == "needle"
+
+
+def test_needle_json_output_serializes_confidence_only(monkeypatch) -> None:
+    needle_result = DecisionResult(
+        backend="needle",
+        model="Cactus-Compute/needle3",
+        calibrated=True,
+        answers={"q1": NoulAnswer(value=True, confidence=0.9)},
+        provider_metadata={"confidence_scope": "whole_response", "probabilities_available": False},
+    )
+
+    class _NeedleBackend:
+        capabilities = type(
+            "C",
+            (),
+            {
+                "backend": "needle",
+                "question_types": frozenset({"noul", "choice", "score"}),
+                "calibrated": True,
+                "allows_json_state": True,
+            },
+        )()
+
+        def evaluate(self, request: object) -> DecisionResult:
+            return needle_result
+
+    def _create_needle_backend(config, credentials, *, client_factory=None):
+        return _NeedleBackend()
+
+    monkeypatch.setattr("bruv.cli.create_backend", _create_needle_backend)
+    result = runner.invoke(
+        app,
+        ["noul", "Refund?", "--state", "ctx", "--backend", "needle", "--output", "json"],
+    )
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["backend"] == "needle"
+    assert payload["model"] == "Cactus-Compute/needle3"
+    assert payload["calibrated"] is True
+    assert payload["answers"]["q1"] == {"type": "noul", "value": True, "confidence": 0.9}
+    assert "probabilities" not in payload["answers"]["q1"]
+    assert payload["provider_metadata"] == {
+        "confidence_scope": "whole_response",
+        "probabilities_available": False,
+    }
 
 
 def test_missing_state_exits_two(fake_backend) -> None:
