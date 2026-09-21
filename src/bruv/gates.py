@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from bruv.domain.results import DecisionResult
+from bruv.domain.results import AbstainAnswer, DecisionResult, ScoreAnswer
 from bruv.output.fields import FieldError, get_field
 
 
@@ -26,14 +26,35 @@ class GateOutcome:
     value: float | None = None
 
 
+class _AbstainResolution(Exception):
+    """Internal signal: resolution found only abstain answers where a value was wanted."""
+
+
+def _abstain_answer_at(result: DecisionResult, field: str) -> bool:
+    """Return True when an exact ``answers.<question_id>...`` path targets an abstain answer."""
+    parts = field.split(".")
+    if len(parts) < 3 or parts[0] != "answers" or parts[1] == "*":
+        return False
+    answer = result.answers.get(parts[1])
+    return isinstance(answer, AbstainAnswer)
+
+
 def _resolve_numeric(result: DecisionResult, field: str) -> float:
     path = field
     if path.endswith(".*.score"):
-        # Pick the first answer's score when a wildcard is requested.
-        for key in result.answers:
-            answer = result.answers[key]
-            if getattr(answer, "type", None) == "score":
-                return float(get_field(result, f"answers.{key}.score"))
+        # Pick the first substantive score answer when a wildcard is requested.
+        substantive: ScoreAnswer | None = None
+        saw_abstain = False
+        for answer in result.answers.values():
+            if isinstance(answer, AbstainAnswer):
+                saw_abstain = True
+            elif isinstance(answer, ScoreAnswer):
+                substantive = answer
+                break
+        if substantive is not None:
+            return float(substantive.score)
+        if saw_abstain:
+            raise _AbstainResolution()
         raise FieldError("no score answer available for wildcard field")
     value = get_field(result, path)
     if not isinstance(value, (int, float)) or isinstance(value, bool):
@@ -46,7 +67,13 @@ def apply_gate(result: DecisionResult, options: GateOptions) -> GateOutcome:
     if options.fail_under is None and options.abstain_band is None:
         return GateOutcome()
 
-    value = _resolve_numeric(result, options.field)
+    if _abstain_answer_at(result, options.field):
+        return GateOutcome(abstained=True)
+
+    try:
+        value = _resolve_numeric(result, options.field)
+    except _AbstainResolution:
+        return GateOutcome(abstained=True)
 
     if options.abstain_band is not None:
         low, high = options.abstain_band
