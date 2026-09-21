@@ -119,6 +119,36 @@ def _verify(artifact: RequiredArtifact, path: Path) -> Path:
     return path
 
 
+def verify_artifact(path: Path, name: str) -> Path:
+    """Reverify one pinned artifact at its immediate consumption boundary.
+
+    ``ensure_artifacts`` verifies right after download, but a shared HF cache
+    can be mutated or garbage-collected between that check and the moment a
+    consumer actually reads the file. Consumers therefore call this right
+    before loading: the expected pinned spec is resolved by exact artifact
+    name and the same size/SHA-256 verification as ``ensure_artifacts`` runs
+    on the file on disk. Only the verified path is returned.
+
+    Errors are sanitized and unpaid: the local cache path never appears in an
+    error message.
+    """
+    for artifact in REQUIRED_ARTIFACTS:
+        if artifact.name == name:
+            break
+    else:
+        raise _unavailable(
+            f"RLCD artifact {name!r} is not a pinned artifact name.",
+            action=INSTALL_ACTION,
+        )
+    try:
+        return _verify(artifact, path)
+    except OSError:
+        raise _unavailable(
+            f"RLCD artifact {name} could not be read for verification on disk.",
+            action=INSTALL_ACTION,
+        ) from None
+
+
 def ensure_artifacts(repo_id: str = REPO_ID, revision: str = REVISION) -> dict[str, Path]:
     """Download and verify every pinned RLCD artifact at the exact revision.
 
@@ -225,4 +255,5 @@ __all__ = [
     "REQUIRED_ARTIFACTS",
     "cached_artifact_status",
     "ensure_artifacts",
+    "verify_artifact",
 ]

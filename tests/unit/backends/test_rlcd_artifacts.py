@@ -30,6 +30,7 @@ from bruv.backends.rlcd_artifacts import (
     RequiredArtifact,
     cached_artifact_status,
     ensure_artifacts,
+    verify_artifact,
 )
 
 ARTIFACT_NAMES = ("model.onnx", "tokenizer.json", "tokenizer_config.json", "calibrator.json")
@@ -339,6 +340,102 @@ def test_missing_huggingface_hub_dependency_fails_with_install_action(
     assert error.paid_request is False
     assert error.action == INSTALL_ACTION
     assert "rlcd-modernbert" in error.message
+
+
+# ---------------------------------------------------------------------------
+# verify_artifact: consumption-boundary reverification
+# ---------------------------------------------------------------------------
+
+
+def test_verify_artifact_accepts_intact_file_for_every_pinned_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifacts, files = _small_artifacts(tmp_path)
+    monkeypatch.setattr(rlcd_artifacts, "REQUIRED_ARTIFACTS", artifacts)
+
+    for name, path in files.items():
+        assert verify_artifact(path, name) == path
+        assert path.is_file()
+
+
+def test_verify_artifact_rejects_tampered_file_with_checksum_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifacts, files = _small_artifacts(tmp_path)
+    files["model.onnx"].write_bytes(b"X" * files["model.onnx"].stat().st_size)
+    monkeypatch.setattr(rlcd_artifacts, "REQUIRED_ARTIFACTS", artifacts)
+
+    with pytest.raises(BackendUnavailableError) as exc_info:
+        verify_artifact(files["model.onnx"], "model.onnx")
+    error = exc_info.value
+    assert error.paid_request is False
+    assert error.action == INSTALL_ACTION
+    assert "failed checksum verification" in error.message
+    assert str(tmp_path) not in error.message
+
+
+def test_verify_artifact_rejects_wrong_size_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifacts, files = _small_artifacts(tmp_path)
+    files["tokenizer.json"].write_bytes(b"short")
+    monkeypatch.setattr(rlcd_artifacts, "REQUIRED_ARTIFACTS", artifacts)
+
+    with pytest.raises(BackendUnavailableError) as exc_info:
+        verify_artifact(files["tokenizer.json"], "tokenizer.json")
+    assert "unexpected size" in exc_info.value.message
+    assert exc_info.value.paid_request is False
+
+
+def test_verify_artifact_rejects_directory_and_missing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifacts, files = _small_artifacts(tmp_path)
+    directory = tmp_path / "dir"
+    directory.mkdir()
+    monkeypatch.setattr(rlcd_artifacts, "REQUIRED_ARTIFACTS", artifacts)
+
+    with pytest.raises(BackendUnavailableError) as exc_info:
+        verify_artifact(directory, "calibrator.json")
+    assert "not a regular file" in exc_info.value.message
+
+    with pytest.raises(BackendUnavailableError) as exc_info:
+        verify_artifact(tmp_path / "missing.json", "calibrator.json")
+    assert "not a regular file" in exc_info.value.message
+    assert str(tmp_path) not in exc_info.value.message
+
+
+def test_verify_artifact_unknown_name_fails_sanitized_and_unpaid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifacts, files = _small_artifacts(tmp_path)
+    monkeypatch.setattr(rlcd_artifacts, "REQUIRED_ARTIFACTS", artifacts)
+
+    with pytest.raises(BackendUnavailableError) as exc_info:
+        verify_artifact(files["model.onnx"], "../escape.onnx")
+    error = exc_info.value
+    assert error.paid_request is False
+    assert error.action == INSTALL_ACTION
+    assert "not a pinned artifact name" in error.message
+    assert str(tmp_path) not in error.message
+
+
+def test_verify_artifact_read_race_failure_is_unpaid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifacts, files = _small_artifacts(tmp_path)
+    monkeypatch.setattr(rlcd_artifacts, "REQUIRED_ARTIFACTS", artifacts)
+
+    def raise_oserror(path: Path) -> str:
+        raise OSError("file vanished during hashing")
+
+    monkeypatch.setattr(rlcd_artifacts, "_sha256", raise_oserror)
+
+    with pytest.raises(BackendUnavailableError) as exc_info:
+        verify_artifact(files["calibrator.json"], "calibrator.json")
+    assert "could not be read for verification on disk" in exc_info.value.message
+    assert exc_info.value.action == INSTALL_ACTION
+    assert exc_info.value.paid_request is False
 
 
 # ---------------------------------------------------------------------------

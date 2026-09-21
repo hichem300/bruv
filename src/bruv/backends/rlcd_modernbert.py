@@ -36,6 +36,7 @@ from bruv.backends.rlcd_artifacts import (
     REPO_ID,
     REVISION,
     ensure_artifacts,
+    verify_artifact,
 )
 from bruv.backends.rlcd_calibration import (
     RlcdCalibrator,
@@ -148,6 +149,9 @@ class OnnxRlcdRuntime:
     """
 
     def __init__(self, model_path: Path) -> None:
+        # Reverify at the consumption boundary: the shared HF cache may have
+        # been mutated or garbage-collected after ``ensure_artifacts``.
+        model_path = verify_artifact(model_path, "model.onnx")
         try:
             import numpy as np  # type: ignore[import-not-found]
             import onnxruntime  # type: ignore[import-not-found]
@@ -201,6 +205,9 @@ class TokenizersRlcdTokenizer:
     """
 
     def __init__(self, tokenizer_path: Path, tokenizer_config_path: Path) -> None:
+        # Reverify at the consumption boundary, before either file is read.
+        tokenizer_path = verify_artifact(tokenizer_path, "tokenizer.json")
+        tokenizer_config_path = verify_artifact(tokenizer_config_path, "tokenizer_config.json")
         try:
             import numpy as np
             from tokenizers import Tokenizer  # type: ignore[import-not-found]
@@ -548,7 +555,9 @@ def build_adapter(
     """
     _validate_pins(model, revision)
     artifacts = ensure_artifacts()
-    calibrator = load_calibrator(artifacts["calibrator.json"])
+    # Reverify at the consumption boundary, right before the synchronous parse.
+    calibrator_path = verify_artifact(artifacts["calibrator.json"], "calibrator.json")
+    calibrator = load_calibrator(calibrator_path)
     runtime = OnnxRlcdRuntime(artifacts["model.onnx"])
     tokenizer = TokenizersRlcdTokenizer(
         artifacts["tokenizer.json"],

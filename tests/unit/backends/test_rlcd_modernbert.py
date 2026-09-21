@@ -7,19 +7,28 @@ artifact dataclass with a full per_k table.
 
 from __future__ import annotations
 
+import hashlib
 import math
+import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
 from bruv.application import (
+    BackendUnavailableError,
     ConfigurationError,
     DecisionFacade,
     ProviderResponseError,
     RequestValidationError,
 )
-from bruv.backends.rlcd_artifacts import REPO_ID, REVISION
+from bruv.backends import rlcd_artifacts
+from bruv.backends.rlcd_artifacts import (
+    REPO_ID,
+    REVISION,
+    RequiredArtifact,
+)
 from bruv.backends.rlcd_calibration import (
     CALIBRATOR_SCOPE,
     UPSTREAM_ABSTAIN_SENTINEL,
@@ -27,7 +36,10 @@ from bruv.backends.rlcd_calibration import (
 )
 from bruv.backends.rlcd_modernbert import (
     ABSTENTION_DESCRIPTION,
+    OnnxRlcdRuntime,
     RlcdModernBertAdapter,
+    TokenizersRlcdTokenizer,
+    build_adapter,
 )
 from bruv.domain.requests import DecisionRequest
 from bruv.domain.results import ABSTAIN_ANSWER_ID
@@ -609,3 +621,136 @@ def test_validate_request_helper_is_the_capability_aware_entrypoint() -> None:
     request = _choice_request({str(i): i for i in range(24)})
     result = validate_request(request, RlcdModernBertAdapter.capabilities)
     assert result.valid is True
+
+
+# ---------------------------------------------------------------------------
+# Consumption-boundary artifact reverification
+#
+# ensure_artifacts verifies after download, but the shared HF cache can be
+# mutated or garbage-collected afterwards. Each consumer must reverify its
+# artifact immediately before reading it. These tests use a small fake
+# artifact table (no network, no model bytes) and prove a tamper after
+# ensure_artifacts is rejected before any optional import or session work.
+# ---------------------------------------------------------------------------
+
+
+def _artifact_fixtures(
+    tmp_path: Path,
+) -> tuple[tuple[RequiredArtifact, ...], dict[str, Path]]:
+    """Small pinned-spec stand-ins backed by real temp files."""
+    contents = {
+        "model.onnx": b"fake-onnx-bytes",
+        "tokenizer.json": b"{}",
+        "tokenizer_config.json": b'{"model_input_names": ["input_ids", "attention_mask"]}',
+        "calibrator.json": b"{}",
+    }
+    specs = tuple(
+        RequiredArtifact(name=name, size=len(data), sha256=hashlib.sha256(data).hexdigest())
+        for name, data in contents.items()
+    )
+    files: dict[str, Path] = {}
+    for name, data in contents.items():
+        path = tmp_path / name
+        path.write_bytes(data)
+        files[name] = path
+    return specs, files
+
+
+def _tamper(path: Path) -> None:
+    """Same size, different bytes: the checksum check is what must fire."""
+    path.write_bytes(b"T" * path.stat().st_size)
+
+
+def test_onnx_runtime_reverifies_model_before_any_optional_import_or_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    specs, files = _artifact_fixtures(tmp_path)
+    monkeypatch.setattr(rlcd_artifacts, "REQUIRED_ARTIFACTS", specs)
+    _tamper(files["model.onnx"])
+    # None in sys.modules makes the import raise ImportError; reaching that
+    # import would surface as ConfigurationError instead, so asserting the
+    # checksum BackendUnavailableError proves verification fired first.
+    monkeypatch.setitem(sys.modules, "numpy", None)
+    monkeypatch.setitem(sys.modules, "onnxruntime", None)
+
+    with pytest.raises(BackendUnavailableError) as exc_info:
+        OnnxRlcdRuntime(files["model.onnx"])
+    error = exc_info.value
+    assert "failed checksum verification" in error.message
+    assert error.paid_request is False
+    assert str(tmp_path) not in error.message
+
+
+def test_onnx_runtime_proceeds_to_optional_import_only_after_verification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    specs, files = _artifact_fixtures(tmp_path)
+    monkeypatch.setattr(rlcd_artifacts, "REQUIRED_ARTIFACTS", specs)
+    monkeypatch.setitem(sys.modules, "numpy", None)
+    monkeypatch.setitem(sys.modules, "onnxruntime", None)
+
+    # Intact artifact: verification passes, the optional imports are reached
+    # and fail with the dependency error. No session is ever constructed.
+    with pytest.raises(ConfigurationError) as exc_info:
+        OnnxRlcdRuntime(files["model.onnx"])
+    assert "rlcd-modernbert" in exc_info.value.message
+
+
+def test_tokenizer_reverifies_both_artifacts_before_loading_either(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    specs, files = _artifact_fixtures(tmp_path)
+    monkeypatch.setattr(rlcd_artifacts, "REQUIRED_ARTIFACTS", specs)
+    monkeypatch.setitem(sys.modules, "numpy", None)
+    monkeypatch.setitem(sys.modules, "tokenizers", None)
+
+    _tamper(files["tokenizer.json"])
+    with pytest.raises(BackendUnavailableError) as exc_info:
+        TokenizersRlcdTokenizer(files["tokenizer.json"], files["tokenizer_config.json"])
+    assert "failed checksum verification" in exc_info.value.message
+    assert exc_info.value.paid_request is False
+
+    # Restore tokenizer.json, tamper tokenizer_config.json instead.
+    files["tokenizer.json"].write_bytes(b"{}")
+    _tamper(files["tokenizer_config.json"])
+    with pytest.raises(BackendUnavailableError) as exc_info:
+        TokenizersRlcdTokenizer(files["tokenizer.json"], files["tokenizer_config.json"])
+    assert "failed checksum verification" in exc_info.value.message
+
+
+def test_tokenizer_proceeds_to_optional_import_only_after_verification(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    specs, files = _artifact_fixtures(tmp_path)
+    monkeypatch.setattr(rlcd_artifacts, "REQUIRED_ARTIFACTS", specs)
+    monkeypatch.setitem(sys.modules, "numpy", None)
+    monkeypatch.setitem(sys.modules, "tokenizers", None)
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        TokenizersRlcdTokenizer(files["tokenizer.json"], files["tokenizer_config.json"])
+    assert "rlcd-modernbert" in exc_info.value.message
+
+
+def test_build_adapter_reverifies_calibrator_before_loading_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    specs, files = _artifact_fixtures(tmp_path)
+    monkeypatch.setattr(rlcd_artifacts, "REQUIRED_ARTIFACTS", specs)
+    monkeypatch.setattr("bruv.backends.rlcd_modernbert.ensure_artifacts", lambda: dict(files))
+
+    def explode(path: object) -> object:
+        raise AssertionError("load_calibrator must run only after verification")
+
+    monkeypatch.setattr("bruv.backends.rlcd_modernbert.load_calibrator", explode)
+
+    # Tampered calibrator.json: the checksum error fires and the loader is
+    # never reached.
+    _tamper(files["calibrator.json"])
+    with pytest.raises(BackendUnavailableError) as exc_info:
+        build_adapter()
+    assert "failed checksum verification" in exc_info.value.message
+
+    # Intact calibrator.json: verification passes and the loader is reached.
+    files["calibrator.json"].write_bytes(b"{}")
+    with pytest.raises(AssertionError, match="only after verification"):
+        build_adapter()
