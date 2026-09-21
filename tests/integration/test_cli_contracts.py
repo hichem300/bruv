@@ -52,14 +52,10 @@ def _neutralize_rlcd_host_env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def rlcd_lazy_import_guard(monkeypatch: pytest.MonkeyPatch):
     """Fail loudly if any optional RLCD runtime package gets imported."""
-    return _install_lazy_import_guard(
-        monkeypatch, OPTIONAL_PACKAGES
-    )
+    return _install_lazy_import_guard(monkeypatch, OPTIONAL_PACKAGES)
 
 
-def _install_lazy_import_guard(
-    monkeypatch: pytest.MonkeyPatch, packages: tuple[str, ...]
-):
+def _install_lazy_import_guard(monkeypatch: pytest.MonkeyPatch, packages: tuple[str, ...]):
     original_import = __import__
 
     def guarded_import(name: str, *args: object, **kwargs: object) -> object:
@@ -132,9 +128,7 @@ def test_rlcd_dry_run_never_imports_optional_packages(rlcd_lazy_import_guard) ->
     assert payload["dry_run"] is True
 
 
-def test_rlcd_spec_help_and_doctor_stay_lazy(
-    monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_rlcd_spec_help_and_doctor_stay_lazy(monkeypatch: pytest.MonkeyPatch) -> None:
     # Doctor's rlcd_cache check deliberately probes huggingface_hub availability;
     # everything else must stay free of optional imports.
     _install_lazy_import_guard(monkeypatch, ("numpy", "onnxruntime", "tokenizers"))
@@ -149,8 +143,12 @@ def test_rlcd_spec_help_and_doctor_stay_lazy(
         "bruv.onboarding.doctor.load_config", lambda **_: AppConfig(backend=RLCD_BACKEND)
     )
     doctor = runner.invoke(app, ["doctor"])
-    assert isinstance(doctor.exception, SystemExit)
     assert doctor.exit_code in (0, 1)
+    if doctor.exit_code == 0:
+        assert doctor.exception is None
+    else:
+        assert isinstance(doctor.exception, SystemExit)
+        assert "FAIL" in doctor.stdout
     assert "rlcd_cache" in doctor.stdout
 
 
@@ -196,9 +194,7 @@ def test_rlcd_choice_conditional_probabilities_json(
         model=REPO_ID,
         calibrated=True,
         answers={
-            "q1": ChoiceAnswer(
-                choice="b", confidence=0.7, probabilities={"a": 0.3, "b": 0.7}
-            )
+            "q1": ChoiceAnswer(choice="b", confidence=0.7, probabilities={"a": 0.3, "b": 0.7})
         },
         provider_metadata=_rlcd_provider_metadata(k=3, full_distribution=full),
     )
@@ -248,9 +244,7 @@ def test_rlcd_score_exact_index_and_legend(
                 probabilities={"0": 0.5, "1": 0.3, "2": 0.2},
             )
         },
-        provider_metadata=_rlcd_provider_metadata(
-            k=4, full_distribution=full, expected_value=1.1
-        ),
+        provider_metadata=_rlcd_provider_metadata(k=4, full_distribution=full, expected_value=1.1),
     )
     _install_fake_backend(monkeypatch, result)
     code, payload = _run_json(
@@ -482,9 +476,7 @@ def test_pinned_backend_rejects_unpinned_config_model_before_artifacts(
         raise AssertionError("download attempted")
 
     monkeypatch.setattr(rlcd_modernbert, "ensure_artifacts", _no_artifacts)
-    monkeypatch.setattr(
-        "bruv.config.config_path", lambda: tmp_path / "bruv.toml", raising=False
-    )
+    monkeypatch.setattr("bruv.config.config_path", lambda: tmp_path / "bruv.toml", raising=False)
     (tmp_path / "bruv.toml").write_text('rlcd_model = "custom/model"\n', encoding="utf-8")
 
     outcome = runner.invoke(
