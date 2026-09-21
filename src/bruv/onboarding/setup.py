@@ -93,10 +93,29 @@ def _needle_handler(
     return SetupResult(backend="needle", persisted=False, next_command="bruv doctor")
 
 
+def _rlcd_handler(
+    *,
+    prompt: PromptFn,
+    confirm: ConfirmFn,
+    print_line: PrintFn,
+    credential_path: Path | None,
+) -> SetupResult:
+    from bruv.backends.registry import get_backend_definition
+
+    install_hint = get_backend_definition("rlcd-modernbert").install_hint
+    if install_hint:
+        print_line(f"{install_hint} (optional; only needed if the packages are missing).")
+    print_line("RLCD runs fully local with free inference.")
+    print_line("First use downloads about 606 MB from Hugging Face.")
+    print_line("No credential needed for RLCD.")
+    return SetupResult(backend="rlcd-modernbert", persisted=False, next_command="bruv doctor")
+
+
 _HANDLERS: dict[str, _BackendSetupHandler] = {
     "typesafe": _typesafe_handler,
     "simple-jev": _simple_jev_handler,
     "needle": _needle_handler,
+    "rlcd-modernbert": _rlcd_handler,
 }
 
 

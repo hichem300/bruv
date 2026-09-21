@@ -128,20 +128,36 @@ def _check_capabilities(capabilities: BackendCapabilities) -> DiagnosticResult:
 
 
 def _check_dependency(backend: str) -> DiagnosticResult:
-    """Check optional module presence without importing it or building a runtime."""
+    """Check optional packages without importing them or building a runtime."""
     from bruv.backends.registry import get_backend_definition
 
-    module = get_backend_definition(backend).optional_module
+    definition = get_backend_definition(backend)
+    if definition.runtime_packages:
+        missing = [
+            package
+            for package in definition.runtime_packages
+            if importlib.util.find_spec(package) is None
+        ]
+        if not missing:
+            return DiagnosticResult(name="dependency", ok=True, message="installed")
+        hint = definition.install_hint or f"Install the {backend} dependency."
+        return DiagnosticResult(
+            name="dependency",
+            ok=False,
+            message=f"missing runtime packages: {', '.join(missing)}",
+            fix=hint,
+        )
+    module = definition.optional_module
     if module is None:
         return DiagnosticResult(name="dependency", ok=True, message="no optional dependency")
     if importlib.util.find_spec(module) is not None:
         return DiagnosticResult(name="dependency", ok=True, message="installed")
-    hint = get_backend_definition(backend).install_hint
+    optional_hint = get_backend_definition(backend).install_hint
     return DiagnosticResult(
         name="dependency",
         ok=False,
         message=f"optional dependency {module!r} is not installed",
-        fix=hint if hint else f"Install the {backend} dependency.",
+        fix=optional_hint if optional_hint else f"Install the {backend} dependency.",
     )
 
 
@@ -165,7 +181,7 @@ def _check_platform(backend: str) -> DiagnosticResult:
         ok=False,
         message=f"unsupported platform ({system} {machine or 'unknown'})",
         fix=(
-            "Needle supports Linux, macOS, and Windows on x86_64 and arm64. "
+            f"{backend} supports Linux, macOS, and Windows on x86_64 and arm64. "
             "Use the typesafe or simple-jev backend on this platform."
         ),
     )
@@ -192,6 +208,60 @@ def _check_cache_writable(backend: str) -> DiagnosticResult:
             fix=f"Grant write access to {parent} or fix your platform cache directory.",
         )
     return DiagnosticResult(name="cache", ok=True, message=f"writable ({parent})")
+
+
+def _check_rlcd_cache(backend: str) -> DiagnosticResult:
+    """Check pinned RLCD cache status without network, download, or model load."""
+    if backend != "rlcd-modernbert":
+        return DiagnosticResult(name="rlcd_cache", ok=True, message="skipped")
+    from bruv.backends.rlcd_artifacts import (
+        STATUS_DEPENDENCY_MISSING,
+        STATUS_HASH_MISMATCH,
+        STATUS_MISSING,
+        STATUS_VERIFIED,
+        cached_artifact_status,
+    )
+
+    statuses = cached_artifact_status()
+    detail = "; ".join(f"{name}: {status}" for name, status in statuses.items())
+    if any(status == STATUS_DEPENDENCY_MISSING for status in statuses.values()):
+        return DiagnosticResult(
+            name="rlcd_cache",
+            ok=True,
+            message="skipped (optional rlcd-modernbert dependency not installed; "
+            "see the dependency check)",
+        )
+    if any(status == STATUS_HASH_MISMATCH for status in statuses.values()):
+        return DiagnosticResult(
+            name="rlcd_cache",
+            ok=False,
+            message=f"cached RLCD artifact failed verification ({detail})",
+            fix=(
+                "Delete the corrupt cached artifact, then run one evaluation again so "
+                "it is re-downloaded and verified."
+            ),
+        )
+    if any(status == STATUS_MISSING for status in statuses.values()):
+        return DiagnosticResult(
+            name="rlcd_cache",
+            ok=False,
+            message=f"cached RLCD artifact missing ({detail})",
+            fix=(
+                "Run one evaluation with the rlcd-modernbert backend while online so the "
+                "pinned artifacts (about 606 MB) download to the local cache and verify."
+            ),
+        )
+    if all(status == STATUS_VERIFIED for status in statuses.values()):
+        return DiagnosticResult(name="rlcd_cache", ok=True, message=f"verified ({detail})")
+    return DiagnosticResult(
+        name="rlcd_cache",
+        ok=False,
+        message=f"unexpected RLCD cache status ({detail})",
+        fix=(
+            "Reinstall or update the pinned rlcd-modernbert backend with "
+            "pip install 'bruv[rlcd-modernbert]', then run one evaluation again."
+        ),
+    )
 
 
 def _check_version_freshness(*, enabled: bool) -> DiagnosticResult:
@@ -226,6 +296,7 @@ def run_doctor(
         _check_dependency(cfg.backend),
         _check_platform(cfg.backend),
         _check_cache_writable(cfg.backend),
+        _check_rlcd_cache(cfg.backend),
         _check_capabilities(backend_capabilities(cfg.backend)),
     ]
     if check_freshness:
