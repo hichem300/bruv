@@ -178,24 +178,33 @@ RLCD returns a full real probability distribution over every candidate plus the 
 
 Reserved IDs never appear inside `ChoiceAnswer`, `ScoreAnswer`, or `NoulAnswer` probability fields. The canonical `__abstain__` ID appears only in `AbstainAnswer.probabilities` and in provider metadata, and only from backends whose capabilities declare explicit-abstention support. Upstream's `__insufficient_evidence__` sentinel is normalized to `__abstain__` at the adapter boundary and never escapes into canonical results. Needle and existing backends remain unchanged.
 
-### Canonical abstain contract
+### Canonical abstain contract (shared)
 
-New canonical `AbstainAnswer`, registered alongside the existing answer types; sibling answers are unchanged:
+New canonical `AbstainAnswer`, registered alongside the existing answer types; sibling answers are unchanged. The contract is shared across abstention-capable backends and supports two modes:
+
+- **Probability-backed mode** (RLCD): the backend computed a real calibrated distribution, so `confidence` and `probabilities` are required together.
+- **Label-only mode** (hosted structured-output backends such as OpenRouter): the backend provides no probabilities, so `confidence`, `probabilities`, and `legend` are omitted; their presence is a validation error. Confidence is never solicited from or fabricated for a label-only backend.
+
+Required in both modes:
 
 - `type`: `"abstain"`.
-- `reason`: the canonical literal `"insufficient_evidence"`, independent of any backend answer-ID naming.
+- `reason`: a canonical literal from the reason set `insufficient_evidence`, `provider_refusal`, `content_filter`, independent of any backend answer-ID naming. RLCD always emits `"insufficient_evidence"` in probability-backed mode; `provider_refusal` and `content_filter` are used when a provider refusal or content filter leaves no structured content for the question.
+- `source_question_type`: the originating question type (`noul`, `choice`, or `score`).
+
+Probability-backed mode additionally requires:
+
 - `confidence`: the real abstention probability from the calibrated distribution, unsmoothed.
 - `probabilities`: the full calibrated distribution over all candidates, keyed by canonical answer IDs, including the reserved `__abstain__` key, summing to 1.0. The adapter normalizes upstream's `__insufficient_evidence__` sentinel to the canonical `__abstain__` in this map; no upstream sentinel key reaches canonical output.
 - `legend`: present when the source question type has one (choice options, score levels), exactly covering the substantive candidates; absent for `noul`.
-- `source_question_type`: the originating question type (`noul`, `choice`, or `score`).
 
 Validators:
 
-- `reason` is the canonical literal `"insufficient_evidence"`.
-- `confidence` and every probability are finite numbers within [0, 1].
-- `probabilities` sums to 1.0 within floating-point tolerance and includes the reserved abstention key `__abstain__`; `probabilities["__abstain__"] == confidence`. The `__abstain__` key is reserved for abstain answers: substantive answer probability maps exclude it, and only `AbstainAnswer.probabilities` may carry it.
-- `legend`, when present, covers exactly the substantive candidates of the source question type.
-- `source_question_type` is a registered question type.
+- Both modes: `reason` is one of the canonical reason literals; `source_question_type` is a registered question type.
+- Probability-backed mode: `confidence` and `probabilities` are required together and omitted together; `confidence` and every probability are finite numbers within [0, 1]; `probabilities` sums to 1.0 within floating-point tolerance and includes the reserved abstention key `__abstain__`; `probabilities["__abstain__"] == confidence`. The `__abstain__` key is reserved for abstain answers: substantive answer probability maps exclude it, and only `AbstainAnswer.probabilities` may carry it.
+- Probability-backed mode: `legend`, when present, covers exactly the substantive candidates of the source question type.
+- Label-only mode: `confidence`, `probabilities`, and `legend` are absent; validators reject their presence.
+
+RLCD emits only probability-backed abstentions with reason `"insufficient_evidence"`; its calibration, mapping, and validation requirements are unchanged by the shared contract.
 
 Behavior: when the targeted answer abstains, render, JSON, and schema output present the `AbstainAnswer`, gates targeting it resolve against `AbstainAnswer` fields, and the command exits 11 (the existing abstain band). Sibling answers in the same request complete normally. There is no invented missing-answer path and no whole-request error: one abstained question never aborts the others.
 
