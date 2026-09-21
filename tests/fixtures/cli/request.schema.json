@@ -1,159 +1,159 @@
 {
-  "$defs": {
-    "ChoiceQuestion": {
-      "additionalProperties": false,
-      "properties": {
-        "criteria": {
-          "additionalProperties": {
-            "$ref": "#/$defs/JsonValue"
-          },
-          "maxProperties": 50,
-          "minProperties": 2,
-          "title": "Criteria",
-          "type": "object"
-        },
-        "instructions": {
-          "title": "Instructions",
-          "type": "string"
-        },
-        "type": {
-          "const": "choice",
-          "default": "choice",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "instructions",
-        "criteria"
-      ],
-      "title": "ChoiceQuestion",
-      "type": "object"
-    },
-    "JsonValue": {},
-    "NoulQuestion": {
-      "additionalProperties": false,
-      "properties": {
-        "criteria": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "$ref": "#/$defs/JsonValue"
-              },
-              "propertyNames": {
-                "enum": [
-                  "true",
-                  "false"
-                ]
-              },
-              "type": "object"
+    "$defs": {
+        "ChoiceQuestion": {
+            "additionalProperties": false,
+            "properties": {
+                "criteria": {
+                    "additionalProperties": {
+                        "$ref": "#/$defs/JsonValue"
+                    },
+                    "maxProperties": 50,
+                    "minProperties": 2,
+                    "title": "Criteria",
+                    "type": "object"
+                },
+                "instructions": {
+                    "title": "Instructions",
+                    "type": "string"
+                },
+                "type": {
+                    "const": "choice",
+                    "default": "choice",
+                    "title": "Type",
+                    "type": "string"
+                }
             },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Criteria"
+            "required": [
+                "instructions",
+                "criteria"
+            ],
+            "title": "ChoiceQuestion",
+            "type": "object"
         },
-        "instructions": {
-          "title": "Instructions",
-          "type": "string"
+        "JsonValue": {},
+        "NoulQuestion": {
+            "additionalProperties": false,
+            "properties": {
+                "criteria": {
+                    "anyOf": [
+                        {
+                            "additionalProperties": {
+                                "$ref": "#/$defs/JsonValue"
+                            },
+                            "propertyNames": {
+                                "enum": [
+                                    "true",
+                                    "false"
+                                ]
+                            },
+                            "type": "object"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ],
+                    "default": null,
+                    "title": "Criteria"
+                },
+                "instructions": {
+                    "title": "Instructions",
+                    "type": "string"
+                },
+                "type": {
+                    "const": "noul",
+                    "default": "noul",
+                    "title": "Type",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "instructions"
+            ],
+            "title": "NoulQuestion",
+            "type": "object"
         },
-        "type": {
-          "const": "noul",
-          "default": "noul",
-          "title": "Type",
-          "type": "string"
+        "ScoreQuestion": {
+            "additionalProperties": false,
+            "properties": {
+                "criteria": {
+                    "items": {
+                        "$ref": "#/$defs/JsonValue"
+                    },
+                    "maxItems": 50,
+                    "minItems": 2,
+                    "title": "Criteria",
+                    "type": "array"
+                },
+                "instructions": {
+                    "title": "Instructions",
+                    "type": "string"
+                },
+                "type": {
+                    "const": "score",
+                    "default": "score",
+                    "title": "Type",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "instructions",
+                "criteria"
+            ],
+            "title": "ScoreQuestion",
+            "type": "object"
         }
-      },
-      "required": [
-        "instructions"
-      ],
-      "title": "NoulQuestion",
-      "type": "object"
     },
-    "ScoreQuestion": {
-      "additionalProperties": false,
-      "properties": {
-        "criteria": {
-          "items": {
+    "$id": "https://bruv.dev/schemas/0.1.0/request.schema.json",
+    "additionalProperties": false,
+    "properties": {
+        "model": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "type": "null"
+                }
+            ],
+            "default": null,
+            "title": "Model"
+        },
+        "questions": {
+            "additionalProperties": {
+                "discriminator": {
+                    "mapping": {
+                        "choice": "#/$defs/ChoiceQuestion",
+                        "noul": "#/$defs/NoulQuestion",
+                        "score": "#/$defs/ScoreQuestion"
+                    },
+                    "propertyName": "type"
+                },
+                "oneOf": [
+                    {
+                        "$ref": "#/$defs/NoulQuestion"
+                    },
+                    {
+                        "$ref": "#/$defs/ChoiceQuestion"
+                    },
+                    {
+                        "$ref": "#/$defs/ScoreQuestion"
+                    }
+                ]
+            },
+            "maxProperties": 256,
+            "minProperties": 1,
+            "title": "Questions",
+            "type": "object"
+        },
+        "state": {
             "$ref": "#/$defs/JsonValue"
-          },
-          "maxItems": 50,
-          "minItems": 2,
-          "title": "Criteria",
-          "type": "array"
-        },
-        "instructions": {
-          "title": "Instructions",
-          "type": "string"
-        },
-        "type": {
-          "const": "score",
-          "default": "score",
-          "title": "Type",
-          "type": "string"
         }
-      },
-      "required": [
-        "instructions",
-        "criteria"
-      ],
-      "title": "ScoreQuestion",
-      "type": "object"
-    }
-  },
-  "$id": "https://bruv.dev/schemas/0.1.0/request.schema.json",
-  "additionalProperties": false,
-  "properties": {
-    "model": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Model"
     },
-    "questions": {
-      "additionalProperties": {
-        "discriminator": {
-          "mapping": {
-            "choice": "#/$defs/ChoiceQuestion",
-            "noul": "#/$defs/NoulQuestion",
-            "score": "#/$defs/ScoreQuestion"
-          },
-          "propertyName": "type"
-        },
-        "oneOf": [
-          {
-            "$ref": "#/$defs/NoulQuestion"
-          },
-          {
-            "$ref": "#/$defs/ChoiceQuestion"
-          },
-          {
-            "$ref": "#/$defs/ScoreQuestion"
-          }
-        ]
-      },
-      "maxProperties": 256,
-      "minProperties": 1,
-      "title": "Questions",
-      "type": "object"
-    },
-    "state": {
-      "$ref": "#/$defs/JsonValue"
-    }
-  },
-  "required": [
-    "state",
-    "questions"
-  ],
-  "title": "DecisionRequest",
-  "type": "object",
-  "version": "0.1.0"
+    "required": [
+        "state",
+        "questions"
+    ],
+    "title": "DecisionRequest",
+    "type": "object",
+    "version": "0.1.0"
 }

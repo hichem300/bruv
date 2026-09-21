@@ -1,141 +1,142 @@
 {
-  "backends": [
-    "typesafe",
-    "simple-jev"
-  ],
-  "commands": [
-    {
-      "arguments": [
+    "backends": [
+        "typesafe",
+        "simple-jev",
+        "needle"
+    ],
+    "commands": [
         {
-          "name": "instructions",
-          "required": true
-        }
-      ],
-      "common_flags": true,
-      "description": "Ask a noul (yes/no confidence) question.",
-      "flags": [
-        "--id",
-        "--state",
-        "--state-file",
-        "--model",
-        "--backend"
-      ],
-      "name": "noul"
-    },
-    {
-      "arguments": [
+            "arguments": [
+                {
+                    "name": "instructions",
+                    "required": true
+                }
+            ],
+            "common_flags": true,
+            "description": "Ask a noul (yes/no confidence) question.",
+            "flags": [
+                "--id",
+                "--state",
+                "--state-file",
+                "--model",
+                "--backend"
+            ],
+            "name": "noul"
+        },
         {
-          "name": "instructions",
-          "required": true
-        }
-      ],
-      "common_flags": true,
-      "description": "Ask a choice question over two or more options.",
-      "flags": [
-        "--id",
-        "--option",
-        "--state",
-        "--state-file",
-        "--model",
-        "--backend"
-      ],
-      "name": "choice"
-    },
-    {
-      "arguments": [
+            "arguments": [
+                {
+                    "name": "instructions",
+                    "required": true
+                }
+            ],
+            "common_flags": true,
+            "description": "Ask a choice question over two or more options.",
+            "flags": [
+                "--id",
+                "--option",
+                "--state",
+                "--state-file",
+                "--model",
+                "--backend"
+            ],
+            "name": "choice"
+        },
         {
-          "name": "instructions",
-          "required": true
-        }
-      ],
-      "common_flags": true,
-      "description": "Ask a score question over two or more ordered levels.",
-      "flags": [
-        "--id",
-        "--level",
-        "--state",
-        "--state-file",
-        "--model",
-        "--backend"
-      ],
-      "name": "score"
-    },
-    {
-      "arguments": [
+            "arguments": [
+                {
+                    "name": "instructions",
+                    "required": true
+                }
+            ],
+            "common_flags": true,
+            "description": "Ask a score question over two or more ordered levels.",
+            "flags": [
+                "--id",
+                "--level",
+                "--state",
+                "--state-file",
+                "--model",
+                "--backend"
+            ],
+            "name": "score"
+        },
         {
-          "name": "eval_file",
-          "required": true
+            "arguments": [
+                {
+                    "name": "eval_file",
+                    "required": true
+                }
+            ],
+            "common_flags": true,
+            "description": "Evaluate a multi-question request from a file.",
+            "flags": [
+                "--state",
+                "--state-file",
+                "--model",
+                "--backend"
+            ],
+            "name": "eval"
+        },
+        {
+            "arguments": [],
+            "common_flags": false,
+            "description": "Validate a canonical request without performing any paid call.",
+            "flags": [
+                "--state",
+                "--state-file",
+                "--eval-file",
+                "--backend",
+                "--output",
+                "--quiet"
+            ],
+            "name": "validate"
+        },
+        {
+            "arguments": [],
+            "common_flags": false,
+            "description": "Print the machine-readable CLI command spec.",
+            "flags": [
+                "--output"
+            ],
+            "name": "spec"
+        },
+        {
+            "arguments": [
+                {
+                    "name": "name",
+                    "required": true
+                }
+            ],
+            "common_flags": false,
+            "description": "Print a JSON Schema (request|output|error).",
+            "flags": [],
+            "name": "schema"
         }
-      ],
-      "common_flags": true,
-      "description": "Evaluate a multi-question request from a file.",
-      "flags": [
-        "--state",
-        "--state-file",
-        "--model",
-        "--backend"
-      ],
-      "name": "eval"
-    },
-    {
-      "arguments": [],
-      "common_flags": false,
-      "description": "Validate a canonical request without performing any paid call.",
-      "flags": [
-        "--state",
-        "--state-file",
-        "--eval-file",
-        "--backend",
+    ],
+    "common_flags": [
         "--output",
-        "--quiet"
-      ],
-      "name": "validate"
+        "--quiet",
+        "--no-color",
+        "--dry-run",
+        "--field",
+        "--fail-under",
+        "--abstain-band"
+    ],
+    "exit_codes": {
+        "abstained": 11,
+        "authentication": 3,
+        "backend_unavailable": 4,
+        "gate_failed": 10,
+        "internal_error": 70,
+        "provider_response": 5,
+        "success": 0,
+        "usage_or_validation": 2
     },
-    {
-      "arguments": [],
-      "common_flags": false,
-      "description": "Print the machine-readable CLI command spec.",
-      "flags": [
-        "--output"
-      ],
-      "name": "spec"
-    },
-    {
-      "arguments": [
-        {
-          "name": "name",
-          "required": true
-        }
-      ],
-      "common_flags": false,
-      "description": "Print a JSON Schema (request|output|error).",
-      "flags": [],
-      "name": "schema"
-    }
-  ],
-  "common_flags": [
-    "--output",
-    "--quiet",
-    "--no-color",
-    "--dry-run",
-    "--field",
-    "--fail-under",
-    "--abstain-band"
-  ],
-  "exit_codes": {
-    "abstained": 11,
-    "authentication": 3,
-    "backend_unavailable": 4,
-    "gate_failed": 10,
-    "internal_error": 70,
-    "provider_response": 5,
-    "success": 0,
-    "usage_or_validation": 2
-  },
-  "output_modes": [
-    "human",
-    "json"
-  ],
-  "paid_request_semantics": "Every error envelope includes paid_request: true when a provider call was attempted and may have incurred cost, and false otherwise. validate, schema, spec, help/version, doctor, and dry-run never incur a paid request.",
-  "version": "0.1.0"
+    "output_modes": [
+        "human",
+        "json"
+    ],
+    "paid_request_semantics": "Every error envelope includes paid_request: true when a provider call was attempted and may have incurred cost, and false otherwise. validate, schema, spec, help/version, doctor, and dry-run never incur a paid request.",
+    "version": "0.1.0"
 }
