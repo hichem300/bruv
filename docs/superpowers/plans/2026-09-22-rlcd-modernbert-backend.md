@@ -98,17 +98,13 @@ class AbstainAnswer(CanonicalModel):
     reason: Literal["insufficient_evidence", "provider_refusal", "content_filter"]
     source_question_type: Literal["noul", "choice", "score"]
     confidence: Probability | None = None
-    probabilities: (
-        Annotated[dict[NonBlankString, Probability], Field(min_length=1)] | None
-    ) = None
+    probabilities: Annotated[dict[NonBlankString, Probability], Field(min_length=1)] | None = None
     legend: Annotated[dict[NonBlankString, JsonValue], Field(min_length=1)] | None = None
 
     @model_validator(mode="after")
     def validate_answer_mode(self) -> AbstainAnswer:
         probability_backed = self.confidence is not None and self.probabilities is not None
-        label_only = (
-            self.confidence is None and self.probabilities is None and self.legend is None
-        )
+        label_only = self.confidence is None and self.probabilities is None and self.legend is None
         if not (probability_backed or label_only):
             raise ValueError(
                 "abstain answer is either probability-backed (confidence + probabilities) "
@@ -118,7 +114,9 @@ class AbstainAnswer(CanonicalModel):
             raise ValueError("legend requires probability-backed abstain answers")
         if self.probabilities is not None:
             if ABSTAIN_ANSWER_ID not in self.probabilities:
-                raise ValueError("abstain probabilities must include the reserved '__abstain__' key")
+                raise ValueError(
+                    "abstain probabilities must include the reserved '__abstain__' key"
+                )
             if self.probabilities[ABSTAIN_ANSWER_ID] != self.confidence:
                 raise ValueError("probabilities['__abstain__'] must equal confidence")
             _validate_probability_distribution(self.probabilities)
@@ -185,8 +183,10 @@ def _prompt_text(request: DecisionRequest, question: object) -> str:
     import json
 
     state = request.state
-    state_text = state if isinstance(state, str) else json.dumps(
-        state, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    state_text = (
+        state
+        if isinstance(state, str)
+        else json.dumps(state, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     )
     parts: list[str] = [str(question.instructions), state_text]
     if isinstance(question, ChoiceQuestion):
@@ -267,7 +267,11 @@ def load_calibrator(path: Path) -> RlcdCalibrator:
         )
     per_k: dict[int, float] = {}
     for key, value in raw.get("per_k", {}).items():
-        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+        if (
+            not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or not math.isfinite(value)
+        ):
             raise ProviderResponseError(
                 message=f"RLCD calibrator per_k[{key!r}] is not a finite number.",
                 paid_request=False,
@@ -343,6 +347,7 @@ REVISION = "8af2496eb63c7fa66d7d234e1f62629380030eb4"
 
 _INSTALL_ACTION = "Install RLCD support with: pip install 'bruv[rlcd-modernbert]'"
 
+
 @dataclass(frozen=True, slots=True)
 class RequiredArtifact:
     name: str
@@ -350,11 +355,26 @@ class RequiredArtifact:
     sha256: str
     required_always: bool = True  # model.onnx may be checked only when present (doctor)
 
+
 REQUIRED_ARTIFACTS: tuple[RequiredArtifact, ...] = (
-    RequiredArtifact("model.onnx", 606_323_181, "4ae01f822538b000fa0e55859d4b3e6b40871d860149397e8784428b2a42ee5e"),
-    RequiredArtifact("tokenizer.json", 3_583_596, "8bb449eb0c037aae44115b65905bb339b8f3f74eb37067c19127feb3c0755723"),
-    RequiredArtifact("tokenizer_config.json", 380, "fb54f027372062b2ca52282efb04d178a8b57167a00cd8f4e816515823a2c016"),
-    RequiredArtifact("calibrator.json", 1_259, "af2a876993148efa0726b6ccf710fe2303897d20c0ce8c7c9036eb50f64d23de"),
+    RequiredArtifact(
+        "model.onnx",
+        606_323_181,
+        "4ae01f822538b000fa0e55859d4b3e6b40871d860149397e8784428b2a42ee5e",
+    ),
+    RequiredArtifact(
+        "tokenizer.json",
+        3_583_596,
+        "8bb449eb0c037aae44115b65905bb339b8f3f74eb37067c19127feb3c0755723",
+    ),
+    RequiredArtifact(
+        "tokenizer_config.json",
+        380,
+        "fb54f027372062b2ca52282efb04d178a8b57167a00cd8f4e816515823a2c016",
+    ),
+    RequiredArtifact(
+        "calibrator.json", 1_259, "af2a876993148efa0726b6ccf710fe2303897d20c0ce8c7c9036eb50f64d23de"
+    ),
 )
 
 
@@ -480,6 +500,7 @@ Runtime ports and default implementations:
 ```python
 from typing import Protocol, runtime_checkable
 
+
 @runtime_checkable
 class RlcdRuntime(Protocol):
     def run(self, input_ids: object, attention_mask: object) -> object: ...
@@ -521,8 +542,8 @@ class RlcdTokenizerPort(Protocol):
         ...
 
 
-LABEL_MARKER_ID = 50368   # <<LABEL>>
-SEP_MARKER_ID = 50369     # <<SEP>>
+LABEL_MARKER_ID = 50368  # <<LABEL>>
+SEP_MARKER_ID = 50369  # <<SEP>>
 MAX_SEQUENCE_LENGTH = 512
 
 
@@ -557,6 +578,7 @@ Prompt formatting (module-level, pure functions):
 
 ```python
 ABSTENTION_DESCRIPTION = "insufficient evidence"
+
 
 def _level_text(level: JsonValue) -> str:
     return json.dumps(level, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -649,7 +671,9 @@ def build_adapter() -> RlcdModernBertAdapter:
     artifacts = ensure_artifacts()
     calibrator = load_calibrator(artifacts["calibrator.json"])
     runtime = OnnxRlcdRuntime(artifacts["model.onnx"])
-    tokenizer = TokenizersRlcdTokenizer(artifacts["tokenizer.json"], artifacts["tokenizer_config.json"])
+    tokenizer = TokenizersRlcdTokenizer(
+        artifacts["tokenizer.json"], artifacts["tokenizer_config.json"]
+    )
     return RlcdModernBertAdapter(runtime=runtime, tokenizer=tokenizer, calibrator=calibrator)
 ```
 
@@ -674,6 +698,7 @@ def _build_rlcd_modernbert(context: BackendBuildContext) -> DecisionBackend:
     from bruv.backends.rlcd_modernbert import build_adapter
 
     return build_adapter()
+
 
 BackendDefinition(
     name="rlcd-modernbert",
@@ -749,9 +774,12 @@ def _rlcd_handler(*, prompt, confirm, print_line, credential_path) -> SetupResul
     install_hint = get_backend_definition("rlcd-modernbert").install_hint
     if install_hint:
         print_line(f"{install_hint} (optional; only needed if the packages are missing).")
-    print_line("RLCD ModernBERT runs fully local. First use downloads about 606 MB from Hugging Face.")
+    print_line(
+        "RLCD ModernBERT runs fully local. First use downloads about 606 MB from Hugging Face."
+    )
     print_line("Inference is local and free. No credential needed.")
     return SetupResult(backend="rlcd-modernbert", persisted=False, next_command="bruv doctor")
+
 
 _HANDLERS["rlcd-modernbert"] = _rlcd_handler
 ```

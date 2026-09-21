@@ -60,9 +60,7 @@ A small runtime port isolates the ONNX session so tests can use fakes without do
 
 ```python
 class RlcdRuntime(Protocol):
-    def run(
-        self, input_ids: object, attention_mask: object
-    ) -> object: ...
+    def run(self, input_ids: object, attention_mask: object) -> object: ...
 ```
 
 The default implementation constructs `onnxruntime.InferenceSession` over the verified cached `model.onnx` with CPU execution provider, `intra_op_num_threads = 4`, `inter_op_num_threads = 1`, and graph optimization `ORT_ENABLE_ALL`, matching the upstream session options. Inputs are `int64` NumPy arrays; the adapter receives the `logits` output back as an array.

@@ -79,9 +79,7 @@ class ChoiceAnswer(CanonicalModel):
     type: Literal["choice"] = "choice"
     choice: NonBlankString
     confidence: Probability | None = None
-    probabilities: (
-        Annotated[dict[NonBlankString, Probability], Field(min_length=1)] | None
-    ) = None
+    probabilities: Annotated[dict[NonBlankString, Probability], Field(min_length=1)] | None = None
 
     @model_validator(mode="after")
     def validate_answer_mode(self) -> ChoiceAnswer:
@@ -112,18 +110,14 @@ class ChoiceAnswer(CanonicalModel):
 - [ ] Add the `NoulAnswer` value-only mode; preserve probability mode and value-plus-confidence selection mode.
 
 ```python
-    @model_validator(mode="after")
-    def validate_answer_mode(self) -> NoulAnswer:
-        probability_mode = self.noul is not None and self.value is None and self.confidence is None
-        selection_mode = (
-            self.noul is None and self.value is not None and self.confidence is not None
-        )
-        value_only_mode = self.noul is None and self.value is not None and self.confidence is None
-        if not (probability_mode or selection_mode or value_only_mode):
-            raise ValueError(
-                "noul answer must contain noul, value with confidence, or value only"
-            )
-        return self
+@model_validator(mode="after")
+def validate_answer_mode(self) -> NoulAnswer:
+    probability_mode = self.noul is not None and self.value is None and self.confidence is None
+    selection_mode = self.noul is None and self.value is not None and self.confidence is not None
+    value_only_mode = self.noul is None and self.value is not None and self.confidence is None
+    if not (probability_mode or selection_mode or value_only_mode):
+        raise ValueError("noul answer must contain noul, value with confidence, or value only")
+    return self
 ```
 
 The existing `NoulAnswer` serializer already pops inactive fields; verify it pops `confidence` when `None` in the value-only mode and extend it if not.
@@ -145,22 +139,23 @@ Commit: `feat: label-only canonical answer modes`
 - [ ] Add config values to `AppConfig` in `src/bruv/config.py`:
 
 ```python
-    openrouter_model: str | None = None
-    openrouter_data_collection: Literal["deny", "allow"] = "deny"
-    openrouter_zdr: bool = True
+openrouter_model: str | None = None
+openrouter_data_collection: Literal["deny", "allow"] = "deny"
+openrouter_zdr: bool = True
 
-    @field_validator("openrouter_model")
-    @classmethod
-    def _validate_openrouter_model(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if not value.strip():
-            raise ValueError("openrouter_model must not be blank")
-        if value.strip() != value:
-            raise ValueError("openrouter_model must not be blank-padded")
-        if value == "openrouter/auto":
-            raise ValueError("openrouter_model must be a concrete model, not openrouter/auto")
-        return value
+
+@field_validator("openrouter_model")
+@classmethod
+def _validate_openrouter_model(cls, value: str | None) -> str | None:
+    if value is None:
+        return None
+    if not value.strip():
+        raise ValueError("openrouter_model must not be blank")
+    if value.strip() != value:
+        raise ValueError("openrouter_model must not be blank-padded")
+    if value == "openrouter/auto":
+        raise ValueError("openrouter_model must be a concrete model, not openrouter/auto")
+    return value
 ```
 
 `backend = "openrouter"` validates automatically through the existing registry-driven `_registered_backend` validator; `openrouter_model` itself has no default and no fallback.
@@ -177,7 +172,7 @@ def require_concrete_model(model: str, *, source: str) -> None:
         raise ConfigurationError(
             message=f"{source} must not be blank.",
             paid_request=False,
-            action="Set a concrete model such as \"openai/gpt-4o-mini\".",
+            action='Set a concrete model such as "openai/gpt-4o-mini".',
         )
     if model.strip() != model:
         raise ConfigurationError(
@@ -189,7 +184,7 @@ def require_concrete_model(model: str, *, source: str) -> None:
         raise ConfigurationError(
             message=f"{source} must be a concrete model, not {RESERVED_ROUTER_ALIAS}.",
             paid_request=False,
-            action="Set a concrete model such as \"openai/gpt-4o-mini\".",
+            action='Set a concrete model such as "openai/gpt-4o-mini".',
         )
 ```
 
@@ -282,21 +277,23 @@ def _build_openrouter(context: BackendBuildContext) -> DecisionBackend:
 ```
 
 ```python
-        BackendDefinition(
-            name="openrouter",
-            capabilities=BackendCapabilities(
-                backend="openrouter",
-                question_types=frozenset({"noul", "choice", "score"}),
-                calibrated=False,
-                allows_json_state=True,
-                explicit_abstention=True,
-                reserved_answer_ids=frozenset({"__abstain__"}),
-            ),
-            build=_build_openrouter,
-            setup_description="hosted, uncalibrated, paid. Needs OPENROUTER_API_KEY.",
-            needs_credentials=True,
-            credential_env="OPENROUTER_API_KEY",
+(
+    BackendDefinition(
+        name="openrouter",
+        capabilities=BackendCapabilities(
+            backend="openrouter",
+            question_types=frozenset({"noul", "choice", "score"}),
+            calibrated=False,
+            allows_json_state=True,
+            explicit_abstention=True,
+            reserved_answer_ids=frozenset({"__abstain__"}),
         ),
+        build=_build_openrouter,
+        setup_description="hosted, uncalibrated, paid. Needs OPENROUTER_API_KEY.",
+        needs_credentials=True,
+        credential_env="OPENROUTER_API_KEY",
+    ),
+)
 ```
 
 No install hint: `httpx` is already a core dependency. `runs_local` stays `False`. No backend-name branches outside this registry: config validation, CLI acceptance, setup, doctor, and specs all read registry metadata.
@@ -425,7 +422,11 @@ def _score_levels(question: ScoreQuestion) -> list[tuple[str, float]]:
         if isinstance(level, dict):
             level_id = level.get("id")
             raw_value = level.get("value")
-            level_id_str = str(level_id) if isinstance(level_id, str) and level_id.strip() else f"level_{index}"
+            level_id_str = (
+                str(level_id)
+                if isinstance(level_id, str) and level_id.strip()
+                else f"level_{index}"
+            )
         else:
             level_id_str = f"level_{index}"
             raw_value = level
@@ -547,7 +548,11 @@ def _parse_response(response: httpx.Response) -> _ParsedResponse:
     refusal_reason: str | None = None
     if finish_reason == "content_filter":
         refusal_reason = "content_filter"
-    elif isinstance(message, dict) and isinstance(message.get("refusal"), str) and message["refusal"].strip():
+    elif (
+        isinstance(message, dict)
+        and isinstance(message.get("refusal"), str)
+        and message["refusal"].strip()
+    ):
         refusal_reason = "provider_refusal"
     content: dict[str, Any] | None = None
     if isinstance(message, dict) and message.get("content") is not None:
@@ -570,7 +575,9 @@ def _parse_response(response: httpx.Response) -> _ParsedResponse:
         content = raw_content
     usage_payload = body.get("usage") if isinstance(body.get("usage"), dict) else None
     cost = usage_payload.get("cost") if usage_payload else None
-    cost_value = float(cost) if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None
+    cost_value = (
+        float(cost) if isinstance(cost, (int, float)) and not isinstance(cost, bool) else None
+    )
     request_id = body.get("id")
     request_id_value = request_id if isinstance(request_id, str) and request_id.strip() else None
     return _ParsedResponse(content, refusal_reason, usage_payload, cost_value, request_id_value)
@@ -920,7 +927,9 @@ def _check_openrouter_key(
             fix="Set OPENROUTER_API_KEY or run `bruv setup`.",
         )
     if fetch is None:
-        return DiagnosticResult(name="openrouter_key", ok=True, message="key present (live check unavailable)")
+        return DiagnosticResult(
+            name="openrouter_key", ok=True, message="key present (live check unavailable)"
+        )
     try:
         payload = fetch("https://openrouter.ai/api/v1/key", creds.openrouter_api_key or "")
     except Exception:  # noqa: BLE001
@@ -938,7 +947,9 @@ def _check_openrouter_key(
             message="unexpected key-check response",
             fix="Retry later. This check is free and never sends a paid request.",
         )
-    return DiagnosticResult(name="openrouter_key", ok=True, message="key valid; credit data returned")
+    return DiagnosticResult(
+        name="openrouter_key", ok=True, message="key valid; credit data returned"
+    )
 ```
 
 Extend `run_doctor(...)` with `check_openrouter_key: bool = False` and an injectable `key_fetch` callable; append the result only when `backend == "openrouter"` (this one branch is acceptable as doctor-level opt-in wiring, not adapter logic). Doctor never sends a paid Chat Completions request; the key check is the documented free `GET https://openrouter.ai/api/v1/key`.
@@ -959,8 +970,12 @@ def _openrouter_handler(
     print_line: PrintFn,
     credential_path: Path | None,
 ) -> SetupResult:
-    print_line("OpenRouter is a paid hosted backend: request content is sent to OpenRouter and upstream providers.")
-    print_line("Privacy defaults: data_collection=deny, zdr=true. Content is not used for training or retained.")
+    print_line(
+        "OpenRouter is a paid hosted backend: request content is sent to OpenRouter and upstream providers."
+    )
+    print_line(
+        "Privacy defaults: data_collection=deny, zdr=true. Content is not used for training or retained."
+    )
     print_line("A concrete model is required (openrouter_model); openrouter/auto is not allowed.")
     api_key = prompt("OpenRouter API key (input hidden)")
     if not api_key.strip():
@@ -994,29 +1009,28 @@ Commit: `feat: openrouter setup onboarding`
 - [ ] Update `src/bruv/output/terminal.py` for label-only and abstain rendering:
 
 ```python
-    for question_id, answer in result.answers.items():
-        if answer.type == "abstain":
-            lines.append(f"{question_id}: abstained ({answer.reason})")
-        elif isinstance(answer, NoulAnswer):
-            if answer.noul is not None:
-                lines.append(f"{question_id}: {answer.noul:.3f}")
-            elif answer.confidence is not None:
-                lines.append(
-                    f"{question_id}: {str(answer.value).lower()} "
-                    f"(confidence: {answer.confidence:.3f})"
-                )
-            else:
-                lines.append(f"{question_id}: {str(answer.value).lower()}")
-        elif isinstance(answer, ChoiceAnswer):
-            if answer.confidence is not None:
-                lines.append(f"{question_id}: {answer.choice} (confidence: {answer.confidence:.3f})")
-            else:
-                lines.append(f"{question_id}: {answer.choice} (uncalibrated)")
-        elif isinstance(answer, ScoreAnswer):
-            if answer.confidence is not None:
-                lines.append(f"{question_id}: {answer.score:.3f} (confidence: {answer.confidence:.3f})")
-            else:
-                lines.append(f"{question_id}: {answer.score:.3f} (uncalibrated)")
+for question_id, answer in result.answers.items():
+    if answer.type == "abstain":
+        lines.append(f"{question_id}: abstained ({answer.reason})")
+    elif isinstance(answer, NoulAnswer):
+        if answer.noul is not None:
+            lines.append(f"{question_id}: {answer.noul:.3f}")
+        elif answer.confidence is not None:
+            lines.append(
+                f"{question_id}: {str(answer.value).lower()} (confidence: {answer.confidence:.3f})"
+            )
+        else:
+            lines.append(f"{question_id}: {str(answer.value).lower()}")
+    elif isinstance(answer, ChoiceAnswer):
+        if answer.confidence is not None:
+            lines.append(f"{question_id}: {answer.choice} (confidence: {answer.confidence:.3f})")
+        else:
+            lines.append(f"{question_id}: {answer.choice} (uncalibrated)")
+    elif isinstance(answer, ScoreAnswer):
+        if answer.confidence is not None:
+            lines.append(f"{question_id}: {answer.score:.3f} (confidence: {answer.confidence:.3f})")
+        else:
+            lines.append(f"{question_id}: {answer.score:.3f} (uncalibrated)")
 ```
 
 Import `AbstainAnswer` (or branch on `answer.type == "abstain"` to avoid importing it). An abstained targeted answer renders an explicit abstention notice with the canonical reason; human output for openrouter shows `calibration: uncalibrated` through the existing `calibrated` marker.
@@ -1133,7 +1147,11 @@ class FakeTransport:
 
 
 def _response(payload: dict, status: int = 200) -> httpx.Response:
-    return httpx.Response(status_code=status, json=payload, request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"))
+    return httpx.Response(
+        status_code=status,
+        json=payload,
+        request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+    )
 
 
 def _adapter(transport: FakeTransport) -> OpenRouterAdapter:
@@ -1211,7 +1229,9 @@ pytestmark = pytest.mark.live
 @pytest.fixture(autouse=True)
 def _require_opt_in():
     if not os.environ.get("OPENROUTER_API_KEY") or not os.environ.get("BRUV_LIVE_SMOKE_MODEL"):
-        pytest.skip("opt-in only: set OPENROUTER_API_KEY and BRUV_LIVE_SMOKE_MODEL to run (this spends credits)")
+        pytest.skip(
+            "opt-in only: set OPENROUTER_API_KEY and BRUV_LIVE_SMOKE_MODEL to run (this spends credits)"
+        )
 
 
 def test_live_smoke_label_only_choice():
