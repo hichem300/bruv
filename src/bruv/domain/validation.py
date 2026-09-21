@@ -56,9 +56,12 @@ def _question_text_parts(question: Question, state: object) -> list[str]:
     """Collect prompt-derived text for a question: instructions, state, and descriptions."""
     parts = [question.instructions, _serialize_json_state(state)]
     if isinstance(question, ChoiceQuestion):
-        parts.extend(value for value in question.criteria.values() if isinstance(value, str))
+        parts.extend(str(value) for value in question.criteria.values())
     elif isinstance(question, ScoreQuestion):
-        parts.extend(level for level in question.criteria if isinstance(level, str))
+        parts.extend(
+            json.dumps(level, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+            for level in question.criteria
+        )
     return parts
 
 
