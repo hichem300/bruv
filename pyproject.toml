@@ -43,6 +43,9 @@ bruv = "bruv.cli:main"
 packages = ["src/bruv"]
 artifacts = ["skills/bruv/SKILL.md", "examples/funnel-audit-agent/**"]
 
+[tool.hatch.build.targets.sdist]
+exclude = [".memory"]
+
 [tool.hatch.build.targets.wheel.force-include]
 "skills/bruv/SKILL.md" = "skills/bruv/SKILL.md"
 "examples/funnel-audit-agent" = "examples/funnel-audit-agent"
