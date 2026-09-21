@@ -203,7 +203,7 @@ def test_noul_contract_maps_boolean_schema_and_selection_answer() -> None:
     description = call["description"]
     assert isinstance(description, str)
     assert "Decide refund" in description
-    assert 'Return one boolean decision' in description
+    assert "Return one boolean decision" in description
     assert '"false":"no refund"' in description
 
     answer = result.answers["q"]
@@ -475,8 +475,7 @@ def test_optional_needle_module_not_imported_on_module_load() -> None:
         [
             sys.executable,
             "-c",
-            "import sys; import bruv.backends.needle;"
-            " print('needle' in sys.modules)",
+            "import sys; import bruv.backends.needle; print('needle' in sys.modules)",
         ],
         capture_output=True,
         text=True,

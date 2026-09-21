@@ -68,7 +68,10 @@ For `ChoiceAnswer` and `ScoreAnswer`, change `probabilities` to an optional fiel
 
 ```python
 class NeedleRuntime(Protocol):
-    def classify(self, *, text: str, schema: dict[str, object], description: str) -> NeedleSelection: ...
+    def classify(
+        self, *, text: str, schema: dict[str, object], description: str
+    ) -> NeedleSelection: ...
+
 
 @dataclass(frozen=True, slots=True)
 class NeedleSelection:
@@ -76,9 +79,13 @@ class NeedleSelection:
     confidence: float
     suppressed: bool = False
 
+
 class CactusNeedleRuntime:
     def __init__(self) -> None: ...
-    def classify(self, *, text: str, schema: dict[str, object], description: str) -> NeedleSelection: ...
+    def classify(
+        self, *, text: str, schema: dict[str, object], description: str
+    ) -> NeedleSelection: ...
+
 
 class NeedleAdapter(DecisionBackend):
     capabilities = BackendCapabilities(
