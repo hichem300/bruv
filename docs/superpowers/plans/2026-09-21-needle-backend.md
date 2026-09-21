@@ -104,7 +104,44 @@ class NeedleAdapter(DecisionBackend):
 - [ ] Run targeted Ruff/mypy import checks.
 - [ ] Commit: `feat: add local Needle backend adapter`.
 
-## Task 3: Wire dependency, config, and factory
+## Task 2A: Refactor backend selection into registry-backed Factory
+
+- [ ] Create `src/bruv/backends/registry.py` as the single source of backend definitions. Preserve existing Ports + Adapters + Facade architecture: `DecisionBackend` remains the Strategy port, provider classes remain Adapters, and registry lookup replaces factory conditionals.
+
+Use a frozen definition with metadata required outside provider code:
+
+```python
+@dataclass(frozen=True, slots=True)
+class BackendDefinition:
+    name: str
+    capabilities: BackendCapabilities
+    build: BackendBuilder
+    setup_description: str
+    install_hint: str | None = None
+    needs_credentials: bool = False
+```
+
+Keep registry explicit and internal. Do not implement entry-point discovery, external plugins, inheritance hierarchies, Abstract Factory, or Bridge.
+
+- [ ] Register `typesafe`, `simple-jev`, and `needle`. Builder functions own lazy provider imports and construction. Use a typed build context with config, credentials, and a mapping of optional injected runtime/client factories so tests do not force provider imports or model downloads.
+- [ ] Expose narrow functions:
+
+```python
+def backend_names() -> tuple[str, ...]: ...
+def get_backend_definition(name: str) -> BackendDefinition: ...
+def backend_capabilities(name: str) -> BackendCapabilities: ...
+def create_registered_backend(name: str, context: BackendBuildContext) -> DecisionBackend: ...
+```
+
+Unknown names raise stable `ConfigurationError`; duplicate registration fails during module initialization.
+
+- [ ] Refactor `src/bruv/backends/factory.py` into compatibility wrappers over registry lookup. Preserve current public construction behavior while routing selection through one registry lookup. No `if config.backend == ...` provider chain remains.
+- [ ] Replace hard-coded backend lists in config validation and machine spec with registry-derived names. Avoid import cycles through `TYPE_CHECKING`, narrow metadata modules, or lazy function-local imports. Backend validation must not instantiate adapters or import optional provider packages.
+- [ ] Add registry tests covering names, capabilities, construction override injection, unknown backend, duplicate protection, and proof that listing/validation does not import `needle` or download models.
+- [ ] Run focused registry/config/factory/spec tests, Ruff, and mypy.
+- [ ] Commit: `refactor: register decision backends`.
+
+## Task 3: Wire dependency and Needle configuration
 
 - [ ] Add optional extra to `pyproject.toml`:
 
@@ -115,8 +152,8 @@ needle = [
 ```
 
 - [ ] Extend `BackendName` and config validation to include `needle`; add `needle_model: str = "Cactus-Compute/needle3"`. Keep `JEV_BACKEND` precedence unchanged.
-- [ ] In `src/bruv/backends/factory.py`, return Needle capabilities without importing `cactus-needle`. Construct `CactusNeedleRuntime` and `NeedleAdapter` only when selected. Keep injected `client_factory` behavior for current HTTP/SDK backends; add a dedicated optional `needle_runtime_factory` parameter instead of overloading client types.
-- [ ] Update CLI backend type declarations or validation in `src/bruv/cli.py` so every command accepts `--backend needle`.
+- [ ] Complete Needle's registry definition and construction hook without importing `cactus-needle` during backend listing, config validation, specs, doctor, or dry-run. Construct `CactusNeedleRuntime` only when actual Needle evaluation begins. Keep test override injection through registry build context rather than adding another provider-specific factory branch.
+- [ ] Update CLI backend type declarations or validation in `src/bruv/cli.py` to consume registry names so every registered backend is accepted without another hard-coded list.
 - [ ] Confirm `bruv validate ... --backend needle` performs no model import/download.
 - [ ] Commit: `feat: wire Needle backend configuration`.
 

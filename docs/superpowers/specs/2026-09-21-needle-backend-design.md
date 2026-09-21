@@ -40,6 +40,14 @@ Use base Needle 3. First construction downloads and caches the approximately 35 
 
 The adapter must expose a client/runtime port so tests can use fakes without importing Needle or downloading weights.
 
+### Extensible backend registry
+
+Use Refactoring Guru's Strategy and Adapter patterns, selected through a registry-backed Factory. `DecisionBackend` remains the Strategy interface. Each provider adapter translates its native runtime into canonical bruv results. A central registry stores backend metadata and construction functions.
+
+Registry metadata must be the source for backend names, capabilities, installation hints, credential requirements, CLI/spec choices, setup descriptions, and doctor hooks. Config accepts a backend string only when it exists in the registry. Factory construction performs one registry lookup instead of provider conditionals.
+
+Adding a backend such as RLCD ModernBERT or Reflex should require one adapter, one registration definition, provider-specific tests, and documentation. It must not require new backend-name branches across config, CLI, contracts, setup, and doctor. Keep provider-specific configuration and diagnostics inside its registration hooks rather than building a large universal configuration abstraction.
+
 ### Question execution
 
 Evaluate each question separately. Each question gets its own schema and Needle completion, producing confidence specific to that answer instead of reusing one combined confidence.
