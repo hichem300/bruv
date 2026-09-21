@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from bruv.domain.errors import ValidationIssue
-from bruv.domain.questions import ScoreQuestion
+from bruv.domain.questions import ChoiceQuestion, Question, ScoreQuestion
 from bruv.domain.requests import DecisionRequest
 
 
@@ -15,6 +16,10 @@ class BackendCapabilities:
     question_types: frozenset[str]
     calibrated: bool
     allows_json_state: bool
+    explicit_abstention: bool = False
+    supported_total_candidates: frozenset[int] | None = None
+    reserved_input_markers: tuple[str, ...] = ()
+    reserved_answer_ids: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not isinstance(self.backend, str) or not self.backend.strip():
@@ -38,6 +43,95 @@ def _is_top_level_number_or_bool(value: object) -> bool:
 
 def _is_provider_entry_scalar(value: object) -> bool:
     return isinstance(value, (bool, int, float))
+
+
+def _serialize_json_state(state: object) -> str:
+    """Serialize non-string state deterministically; string state passes through."""
+    if isinstance(state, str):
+        return state
+    return json.dumps(state, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _question_text_parts(question: Question, state: object) -> list[str]:
+    """Collect prompt-derived text for a question: instructions, state, and descriptions."""
+    parts = [question.instructions, _serialize_json_state(state)]
+    if isinstance(question, ChoiceQuestion):
+        parts.extend(value for value in question.criteria.values() if isinstance(value, str))
+    elif isinstance(question, ScoreQuestion):
+        parts.extend(level for level in question.criteria if isinstance(level, str))
+    return parts
+
+
+def _validate_reserved_input_markers(
+    question_id: str,
+    question: Question,
+    state: object,
+    markers: tuple[str, ...],
+    issues: list[ValidationIssue],
+) -> None:
+    combined = "\n".join(_question_text_parts(question, state))
+    for marker in markers:
+        if marker and marker in combined:
+            issues.append(
+                ValidationIssue(
+                    code="reserved_input_marker",
+                    path=("questions", question_id),
+                    message=(
+                        f"Reserved input marker {marker!r} must not appear in "
+                        "question-derived prompt text."
+                    ),
+                )
+            )
+
+
+def _validate_candidate_totals(
+    question_id: str,
+    question: Question,
+    capabilities: BackendCapabilities,
+    issues: list[ValidationIssue],
+) -> bool:
+    """Return True when candidate totals are supported; False otherwise."""
+    if capabilities.supported_total_candidates is None:
+        return True
+    if question.type == "noul":
+        total = 3
+    elif question.criteria is None:
+        return True
+    else:
+        total = len(question.criteria) + (1 if capabilities.explicit_abstention else 0)
+    if total not in capabilities.supported_total_candidates:
+        issues.append(
+            ValidationIssue(
+                code="total_candidates_not_supported",
+                path=("questions", question_id, "criteria"),
+                message=(
+                    f"Backend '{capabilities.backend}' does not support "
+                    f"{total} candidate answers for this question."
+                ),
+            )
+        )
+        return False
+    return True
+
+
+def _validate_reserved_answer_ids(
+    question_id: str,
+    question: Question,
+    reserved_answer_ids: frozenset[str],
+    issues: list[ValidationIssue],
+) -> None:
+    """Choice option IDs are the only caller-declared IDs that can collide."""
+    if not isinstance(question, ChoiceQuestion):
+        return
+    for option_id in sorted(question.criteria):
+        if option_id in reserved_answer_ids:
+            issues.append(
+                ValidationIssue(
+                    code="reserved_answer_id_collision",
+                    path=("questions", question_id, "criteria", option_id),
+                    message=f"Choice option id {option_id!r} collides with a reserved answer id.",
+                )
+            )
 
 
 def validate_request(
@@ -102,6 +196,21 @@ def validate_request(
                     message="TypeSafe score criteria must contain between 2 and 10 levels.",
                 )
             )
+
+        _validate_candidate_totals(question_id, question, capabilities, issues)
+        _validate_reserved_input_markers(
+            question_id,
+            question,
+            request.state,
+            capabilities.reserved_input_markers,
+            issues,
+        )
+        _validate_reserved_answer_ids(
+            question_id,
+            question,
+            capabilities.reserved_answer_ids,
+            issues,
+        )
 
         if capabilities.backend == "simple-jev":
             criteria = question.criteria
