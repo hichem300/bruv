@@ -33,3 +33,22 @@ to a user-owned directory and never require sudo/administrator.
 bruv --help
 bruv doctor
 ```
+
+## Needle backend (optional)
+
+Needle runs the Needle 3 model fully on your machine. No credential needed.
+
+```bash
+pip install 'bruv[needle]'
+```
+
+- First use downloads about 35 MB of model weights to your local cache.
+  Later runs use the cached weights; no download happens again.
+- All inference is local. Needle telemetry is disabled (`NEEDLE_TELEMETRY=0`),
+  and no data leaves your machine.
+- Needle reports calibrated confidence only. It does not produce probability
+  distributions, and bruv never synthesizes them. Score answers carry the
+  selected level index and its legend.
+- Supported platforms: Linux, macOS, and Windows on x86_64 and arm64.
+
+Check everything with `bruv doctor` after selecting the Needle backend.

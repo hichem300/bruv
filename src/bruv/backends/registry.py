@@ -42,6 +42,8 @@ class BackendDefinition:
     setup_description: str
     install_hint: str | None = None
     needs_credentials: bool = False
+    runs_local: bool = False
+    optional_module: str | None = None
 
 
 class _BackendRegistry:
@@ -178,6 +180,8 @@ _REGISTRY = _BackendRegistry(
             build=_build_needle,
             setup_description="local Needle 3 inference. No key needed.",
             install_hint="Install Needle support with: pip install 'bruv[needle]'",
+            runs_local=True,
+            optional_module="needle",
         ),
     )
 )

@@ -29,3 +29,16 @@ machine-readable spec from the same source as help.
 
 Every error envelope includes `paid_request` so you know whether a provider
 call may have incurred cost.
+
+## Needle backend
+
+`--backend needle` runs Needle 3 inference locally. No credential needed.
+Optional dependency: `pip install 'bruv[needle]'`. First use downloads about
+35 MB of model weights to your local cache; after that it runs offline with
+telemetry disabled (`NEEDLE_TELEMETRY=0`).
+
+Needle output is confidence-only: one confidence value per answer, no
+probability distributions, and bruv never synthesizes probabilities. Score
+answers report the selected level index plus its legend. Supported on Linux,
+macOS, and Windows (x86_64 and arm64). `bruv doctor` checks the dependency,
+platform, and local cache without any download.

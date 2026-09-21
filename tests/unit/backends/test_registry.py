@@ -32,6 +32,46 @@ def test_registry_names_and_capabilities() -> None:
     assert get_backend_definition("typesafe").needs_credentials is True
 
 
+def test_needle_registry_metadata_drives_doctor() -> None:
+    definition = get_backend_definition("needle")
+    assert definition.runs_local is True
+    assert definition.optional_module == "needle"
+    for name in ("typesafe", "simple-jev"):
+        hosted = get_backend_definition(name)
+        assert hosted.runs_local is False
+        assert hosted.optional_module is None
+
+
+def test_doctor_local_skips_come_from_registry_metadata(monkeypatch) -> None:
+    """Doctor consults BackendDefinition.runs_local, not a backend-name list."""
+    from bruv.onboarding import doctor as doctor_module
+
+    def fake_definition(name: str):
+        definition = get_backend_definition(name)
+        if name == "simple-jev":
+            return BackendDefinition(
+                name=definition.name,
+                capabilities=definition.capabilities,
+                build=definition.build,
+                setup_description=definition.setup_description,
+                install_hint=definition.install_hint,
+                needs_credentials=definition.needs_credentials,
+                runs_local=True,
+            )
+        return definition
+
+    monkeypatch.setattr(doctor_module, "get_backend_definition", fake_definition)
+    results = doctor_module.run_doctor(
+        config=AppConfig(backend="simple-jev"),  # type: ignore[arg-type]
+        credentials=Credentials(),
+        network_probe=lambda url: False,
+    )
+    for name in ("endpoint", "reachability"):
+        item = next(r for r in results if r.name == name)
+        assert item.ok is True
+        assert "local runtime" in item.message
+
+
 def test_registry_rejects_unknown_backend_without_paid_request() -> None:
     with pytest.raises(ConfigurationError) as caught:
         get_backend_definition("missing")

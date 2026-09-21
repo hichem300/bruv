@@ -71,6 +71,42 @@ def test_setup_invalid_backend_raises() -> None:
         )
 
 
+def test_setup_needle() -> None:
+    lines: list[str] = []
+    result = run_setup(
+        prompt=lambda msg: "needle",
+        confirm=lambda msg: True,
+        print_line=lines.append,
+        env={},
+    )
+    assert result.backend == "needle"
+    assert result.persisted is False
+    assert result.next_command == "bruv doctor"
+    joined = "\n".join(lines)
+    assert "pip install 'bruv[needle]'" in joined
+    assert "35 MB" in joined
+    # Needle must never ask for a credential.
+    assert "API key (input hidden)" not in joined
+
+
+def test_setup_choices_come_from_registry() -> None:
+    lines: list[str] = []
+    try:
+        run_setup(
+            prompt=lambda msg: "needle",
+            confirm=lambda msg: True,
+            print_line=lines.append,
+            env={},
+        )
+    except Exception:  # noqa: BLE001, S110 - menu output is the target
+        pass
+    from bruv.backends.registry import backend_names
+
+    menu = "\n".join(lines)
+    for name in backend_names:
+        assert name in menu
+
+
 def test_doctor_runs_and_reports(monkeypatch) -> None:
     monkeypatch.setattr(
         "bruv.onboarding.doctor.load_config", lambda env={}: AppConfig(backend="simple-jev")

@@ -51,6 +51,13 @@ bruv demo funnel-audit --backend simple-jev --execute  # real evaluation
 - TypeSafe Jev: hosted, calibrated probabilities (population-level).
 - Simple Jev: local/self-hosted, explicitly uncalibrated. bruv always reports
   `calibrated: false` for Simple Jev.
+- Needle: local Needle 3 inference, no key needed. Optional extra:
+  `pip install 'bruv[needle]'`. First use downloads about 35 MB of model
+  weights, then everything runs on your machine with telemetry disabled
+  (`NEEDLE_TELEMETRY=0`). Needle reports confidence only; it never produces
+  synthetic probabilities, and score answers carry the selected level index
+  plus its legend. Supported platforms: Linux, macOS, and Windows on x86_64
+  and arm64.
 
 ## Security and privacy
 
