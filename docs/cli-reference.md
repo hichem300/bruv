@@ -42,3 +42,23 @@ probability distributions, and bruv never synthesizes probabilities. Score
 answers report the selected level index plus its legend. Supported on Linux,
 macOS, and Windows (x86_64 and arm64). `bruv doctor` checks the dependency,
 platform, and local cache without any download.
+
+## RLCD ModernBERT backend
+
+`--backend rlcd-modernbert` runs a pinned GLiClass-ModernBERT decision model
+locally via ONNX Runtime on CPU. No credential needed. Optional dependency:
+`pip install 'bruv[rlcd-modernbert]'`. First use downloads a ~606 MB pinned
+model artifact plus tokenizer and calibrator files from Hugging Face; after
+that runs use the local cache, and `HF_HUB_OFFLINE=1` works once cached.
+
+RLCD supports noul, choice, and score with calibrated probabilities and
+explicit per-question abstention. Unsupported candidate totals are rejected
+before inference. Score values are deterministic zero-based indices; the
+expected value over substantive mass is metadata only.
+
+When a targeted `--abstain-band` gate resolves to abstention, bruv prints an
+`AbstainAnswer` and exits with code 11; mixed question batches keep every
+non-abstaining sibling answer. Supported on Linux, macOS, and Windows
+(x86_64 and arm64). `bruv doctor` checks the dependency, platform, and pinned
+cache status (verified, missing, hash-mismatch, or dependency-missing)
+without any download or model load.

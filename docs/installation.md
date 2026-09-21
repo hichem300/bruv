@@ -52,3 +52,25 @@ pip install 'bruv[needle]'
 - Supported platforms: Linux, macOS, and Windows on x86_64 and arm64.
 
 Check everything with `bruv doctor` after selecting the Needle backend.
+
+## RLCD ModernBERT backend (optional)
+
+RLCD ModernBERT runs a pinned GLiClass-ModernBERT decision model fully on
+your machine through ONNX Runtime on CPU. No credential needed.
+
+```bash
+pip install 'bruv[rlcd-modernbert]'
+```
+
+- First use downloads a ~606 MB pinned `model.onnx` plus tokenizer and
+  calibrator files from Hugging Face at an immutable revision. Every file is
+  verified against a pinned size and SHA-256 before use.
+- Later runs load from the local Hugging Face cache. With `HF_HUB_OFFLINE=1`,
+  bruv works fully offline once artifacts are cached; a missing cache fails
+  closed with a remediation message instead of downloading.
+- All inference is local. Prompts and state never leave your machine; the
+  only network contact is the first-use artifact download from Hugging Face.
+- Supported platforms: Linux, macOS, and Windows on x86_64 and arm64.
+
+Check everything with `bruv doctor` after selecting the RLCD ModernBERT
+backend.

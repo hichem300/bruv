@@ -58,6 +58,12 @@ bruv demo funnel-audit --backend simple-jev --execute  # real evaluation
   synthetic probabilities, and score answers carry the selected level index
   plus its legend. Supported platforms: Linux, macOS, and Windows on x86_64
   and arm64.
+- RLCD ModernBERT: local calibrated inference via ONNX Runtime on CPU, no
+  credential, optional extra: `pip install 'bruv[rlcd-modernbert]'`. First use
+  downloads a ~606 MB pinned model artifact from Hugging Face, then cached
+  runs need no network. Supports noul, choice, and score with calibrated
+  probabilities and explicit per-question abstention. Supported platforms:
+  Linux, macOS, and Windows on x86_64 and arm64.
 
 ## Security and privacy
 
@@ -73,4 +79,5 @@ See `CONTRIBUTING.md`. Please report security issues privately via `SECURITY.md`
 - `docs/installation.md`
 - `docs/configuration.md`
 - `docs/cli-reference.md`
+- `docs/provider-contracts/rlcd-modernbert.md`
 - `docs/release-checklist.md`

@@ -18,7 +18,7 @@ No credential is ever stored in the config file.
 
 ## Environment variables
 
-- `JEV_BACKEND`: `typesafe`, `simple-jev`, or `needle`.
+- `JEV_BACKEND`: `typesafe`, `simple-jev`, `needle`, or `rlcd-modernbert`.
 - `TYPESAFE_API_KEY`: TypeSafe API key (never a CLI flag).
 - `TYPESAFE_ENDPOINT`: optional TypeSafe base URL.
 - `SIMPLE_JEV_BASE_URL`: Simple Jev base URL.
@@ -44,3 +44,25 @@ Needle reports a single confidence value per answer. It does not emit
 probability distributions, and bruv never synthesizes them. For `score`
 questions Needle selects one level index from the supplied legend; the answer
 carries that index and the legend itself.
+
+## RLCD ModernBERT backend
+
+Set `backend = "rlcd-modernbert"` in the config file or pass
+`--backend rlcd-modernbert`. No credential or endpoint is needed: inference
+runs entirely on your machine through ONNX Runtime on CPU.
+
+RLCD requires the optional dependency (`pip install 'bruv[rlcd-modernbert]'`).
+The first run downloads a ~606 MB pinned model artifact plus tokenizer and
+calibrator files from Hugging Face; after that runs use the local cache, and
+`HF_HUB_OFFLINE=1` works once artifacts are cached.
+
+Two config keys are informational and pinned fail-closed:
+
+```toml
+rlcd_model = "heman10x/rlcd-modernbert-151m"
+rlcd_revision = "8af2496eb63c7fa66d7d234e1f62629380030eb4"
+```
+
+There is no environment variable or CLI flag to change the model or revision.
+Any request-level `--model` value must match the pinned model ID exactly; any
+divergent value is rejected before inference.
