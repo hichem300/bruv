@@ -447,9 +447,9 @@ def ensure_artifacts(repo_id: str = REPO_ID, revision: str = REVISION) -> dict[s
 
 def cached_artifact_status() -> dict[str, str]:
     """Doctor-only: report hash status of cached artifacts without downloading or importing the adapter."""
-        try:
-            from huggingface_hub import try_to_load_from_cache
-        except ModuleNotFoundError:
+    try:
+        from huggingface_hub import try_to_load_from_cache
+    except ModuleNotFoundError:
         return {artifact.name: "dependency-missing" for artifact in REQUIRED_ARTIFACTS}
     status: dict[str, str] = {}
     for artifact in REQUIRED_ARTIFACTS:
