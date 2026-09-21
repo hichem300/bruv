@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
 
 from bruv.domain.errors import ValidationIssue
 from bruv.domain.questions import ScoreQuestion
@@ -12,10 +11,14 @@ from bruv.domain.requests import DecisionRequest
 
 @dataclass(frozen=True, slots=True)
 class BackendCapabilities:
-    backend: Literal["typesafe", "simple-jev"]
+    backend: str
     question_types: frozenset[str]
     calibrated: bool
     allows_json_state: bool
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.backend, str) or not self.backend.strip():
+            raise ValueError("backend must be a nonblank string")
 
 
 @dataclass(frozen=True, slots=True)
