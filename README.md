@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/bruv-logo.png" alt="bruv" width="240">
+</p>
+
 # bruv
 
 ![How bruv works](docs/assets/bruv-how-it-works.png)
