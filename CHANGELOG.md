@@ -23,6 +23,15 @@
   from the registry. Doctor adds Needle dependency, platform, and local cache
   checks, plus RLCD ModernBERT dependency, platform, and pinned local cache
   checks; all with no runtime construction or download.
+- Managed Simple Jev setup now verifies existing state on normal reruns and
+  resumes automatically instead of reinstalling from scratch; `--repair`
+  forces a full rebuild.
+- Setup runs a disk-space preflight before package and model downloads and
+  fails early with required versus available space when disk is too low.
+- Setup streams visible git, pip, and model-loading progress to the terminal.
+- Setup warns that the default `Qwen/Qwen3.5-0.8B` model can be non-discriminating in
+  Noul mode; the warning is shown once more on first affected use.
+- Doctor reports Simple Jev endpoint reachability correctly.
 
 ## 0.1.0
 

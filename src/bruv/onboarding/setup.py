@@ -195,6 +195,10 @@ def _managed_simple_jev_setup(
         ManagedSimpleJevSettings,
         SimpleJevPaths,
     )
+    from bruv.onboarding.simple_jev_warning import (
+        WARNING_MESSAGE,
+        is_known_non_discriminating,
+    )
 
     settings = ManagedSimpleJevSettings()
     paths = SimpleJevPaths.default()
@@ -220,7 +224,13 @@ def _managed_simple_jev_setup(
         )
 
     runtime = ManagedSimpleJevRuntime(settings)
-    report = runtime.install(repair=repair)
+    report = runtime.install(repair=repair, progress=print_line)
+
+    if is_known_non_discriminating(report.model):
+        # Setup always warns for the known combo but never consumes the
+        # runtime once-only marker: the managed runtime keeps its own
+        # first-use warning available.
+        print_line(WARNING_MESSAGE)
 
     update_config(
         {
@@ -234,7 +244,7 @@ def _managed_simple_jev_setup(
         path=config_path,
     )
 
-    outcome = runtime.ensure_running()
+    outcome = runtime.ensure_running(progress=print_line)
 
     try:
         with httpx.Client() as client:

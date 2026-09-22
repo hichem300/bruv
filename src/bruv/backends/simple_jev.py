@@ -9,6 +9,8 @@ is explicitly uncalibrated, so every canonical result reports
 
 from __future__ import annotations
 
+import os
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -146,6 +148,8 @@ class SimpleJevAdapter(DecisionBackend):
         model: str,
         client: httpx.Client,
         timeout_seconds: float = 30.0,
+        warning_sink: Callable[[str], None] | None = None,
+        warning_root: str | os.PathLike[str] | None = None,
     ) -> None:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive and finite")
@@ -153,8 +157,31 @@ class SimpleJevAdapter(DecisionBackend):
         self._model = model
         self._client = client
         self._timeout_seconds = float(timeout_seconds)
+        self._warning_sink = warning_sink
+        self._warning_root = warning_root
+
+    def _maybe_emit_warning(self, request: DecisionRequest) -> None:
+        """Once-only advisory warning; never changes evaluation results."""
+        if self._warning_sink is None:
+            return
+        if not any(isinstance(q, NoulQuestion) for q in request.questions.values()):
+            return
+        root = self._warning_root
+        if root is None:
+            from bruv.onboarding.simple_jev_runtime import SimpleJevPaths
+
+            root = SimpleJevPaths.default().root
+        from bruv.onboarding.simple_jev_warning import emit_first_use_warning
+
+        emit_first_use_warning(
+            model=self._model,
+            mode="noul",
+            root=root,
+            sink=self._warning_sink,
+        )
 
     def evaluate(self, request: DecisionRequest) -> DecisionResult:
+        self._maybe_emit_warning(request)
         payload = _to_payload(request, request.model or self._model)
         try:
             response = self._client.post(

@@ -51,6 +51,14 @@ so no large CUDA package is downloaded unnecessarily. Pip runs with
 `--no-cache-dir`, so no persistent pip cache is left on disk.
 
 After setup, normal simple-jev calls auto-start and reuse the managed server.
+Rerunning `bruv setup simple-jev` is safe: it verifies the existing install and
+resumes where it left off, skipping steps that are already complete. Use
+`--repair` to force a full rebuild instead.
+
+Setup runs a disk-space preflight before downloading packages and the model,
+and fails early with the required and available space if disk is too low. Git
+and pip output, plus model-loading progress, stream to your terminal so you can
+see what setup is doing.
 
 ```bash
 bruv setup simple-jev                 # install + start managed runtime
@@ -70,7 +78,15 @@ export SIMPLE_JEV_BASE_URL="https://simple-jev-demo-api.featherless.ai/v1/"
 export SIMPLE_JEV_MODEL="featherless-ai/gemma-4-26B-A4B-classifier"
 ```
 
-Simple Jev stays uncalibrated: bruv always reports `calibrated: false`.
+Simple Jev stays uncalibrated: bruv always reports `calibrated: false`. In
+plain language, that means its score is not a verified real-world probability
+and must not be presented as one. After task-specific validation, uncalibrated
+scores may be used only as relative model signals or for ranking; do not use
+them for threshold decisions or treat them as calibrated confidence figures.
+
+During setup, bruv warns that the default `Qwen/Qwen3.5-0.8B` model can be
+non-discriminating in Noul mode (it may score very similar options alike). The same
+warning is shown once on your first affected use.
 
 ## OpenRouter (paid, hosted)
 

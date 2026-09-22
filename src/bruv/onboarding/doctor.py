@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+import httpx
 import platformdirs
 
 from bruv import __version__
@@ -111,11 +112,21 @@ def _check_endpoint(config: AppConfig) -> DiagnosticResult:
     )
 
 
+def _default_network_probe(url: str) -> bool:
+    """Best-effort GET probe; True only for a successful response."""
+    try:
+        with httpx.Client(timeout=5.0, follow_redirects=True) as client:
+            response = client.get(url)
+        return response.is_success
+    except httpx.HTTPError:
+        return False
+
+
 def _check_reachability(config: AppConfig, probe: NetworkProbe) -> DiagnosticResult:
     if get_backend_definition(config.backend).runs_local:
         return DiagnosticResult(name="reachability", ok=True, message="skipped (local runtime)")
     if config.backend == "simple-jev":
-        url = str(config.simple_jev_base_url) + "/health"
+        url = str(config.simple_jev_base_url).rstrip("/") + "/health"
     elif config.typesafe_endpoint is not None:
         url = str(config.typesafe_endpoint)
     else:
@@ -299,7 +310,7 @@ def run_doctor(
     cfg = config if config is not None else load_config(env={})
     creds = credentials if credentials is not None else load_credentials(env={})
     cred_path = credential_file if credential_file is not None else credentials_path()
-    probe = network_probe if network_probe is not None else (lambda url: False)
+    probe = network_probe if network_probe is not None else _default_network_probe
 
     results: list[DiagnosticResult] = [
         _check_version(),

@@ -89,12 +89,25 @@ def _build_typesafe(context: BackendBuildContext) -> DecisionBackend:
 def _build_simple_jev(context: BackendBuildContext) -> DecisionBackend:
     if context.config.simple_jev_managed:
         from urllib.parse import urlparse
-        from bruv.onboarding.simple_jev_runtime import ManagedSimpleJevRuntime, ManagedSimpleJevSettings
+
+        from bruv.onboarding.simple_jev_runtime import (
+            ManagedSimpleJevRuntime,
+            ManagedSimpleJevSettings,
+        )
+
         parsed = urlparse(str(context.config.simple_jev_base_url))
-        settings = ManagedSimpleJevSettings(model=context.config.simple_jev_model, host=parsed.hostname or "127.0.0.1", port=parsed.port or 8000, device=context.config.simple_jev_device, dtype=context.config.simple_jev_dtype)
+        settings = ManagedSimpleJevSettings(
+            model=context.config.simple_jev_model,
+            host=parsed.hostname or "127.0.0.1",
+            port=parsed.port or 8000,
+            device=context.config.simple_jev_device,
+            dtype=context.config.simple_jev_dtype,
+        )
         ManagedSimpleJevRuntime(settings=settings).ensure_running()
 
     from bruv.backends.simple_jev import SimpleJevAdapter
+    from bruv.onboarding.simple_jev_runtime import SimpleJevPaths
+    from bruv.onboarding.simple_jev_warning import stderr_sink
 
     dependency = context.selected_dependency()
     client = (
@@ -102,6 +115,15 @@ def _build_simple_jev(context: BackendBuildContext) -> DecisionBackend:
         if dependency is not None
         else _default_simple_jev_client(context.config)
     )
+    if context.config.simple_jev_managed:
+        return SimpleJevAdapter(
+            base_url=str(context.config.simple_jev_base_url),
+            model=context.config.simple_jev_model,
+            client=client,
+            timeout_seconds=context.config.request_timeout_seconds,
+            warning_sink=stderr_sink(),
+            warning_root=SimpleJevPaths.default().root,
+        )
     return SimpleJevAdapter(
         base_url=str(context.config.simple_jev_base_url),
         model=context.config.simple_jev_model,

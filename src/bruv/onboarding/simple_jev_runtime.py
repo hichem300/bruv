@@ -60,6 +60,15 @@ _PY_312 = (3, 12)
 _CUDA_PROBE_TIMEOUT_SECONDS = 600.0
 _COMMAND_STDERR_EXCERPT_LIMIT = 600
 
+#: Minimum free bytes required before installing packages into the venv.
+_DISK_MIN_INSTALL_BYTES = 5 * 1024**3
+#: Minimum free bytes required before launching the server (model download).
+_DISK_MIN_MODEL_BYTES = 4 * 1024**3
+#: Upper bound on server-log text forwarded through the progress callback.
+_SERVER_LOG_FORWARD_LIMIT = 4000
+#: Per-emission excerpt length for forwarded server-log lines.
+_SERVER_LOG_EXCERPT_LIMIT = 300
+
 
 # ---------------------------------------------------------------------------
 # Errors
@@ -307,6 +316,116 @@ class CommandResult:
 CommandRunner = Callable[..., CommandResult]
 """Run ``command`` with optional ``cwd`` and ``timeout`` keyword arguments."""
 
+StreamRunner = Callable[..., CommandResult]
+"""Streaming command runner.
+
+Explicit signature::
+
+    stream(command, *, cwd=None, timeout=None, progress=None) -> CommandResult
+
+``progress`` (when given) receives each merged stdout/stderr line as it is
+produced; the returned ``CommandResult`` still carries bounded accumulated
+stdout/stderr for diagnostics.
+"""
+
+#: Maximum buffered characters per stream kept on ``CommandResult``.
+_STREAM_BUFFER_LIMIT = 100_000
+
+
+def _default_stream_run(
+    command: Sequence[str],
+    *,
+    cwd: Path | str | None = None,
+    timeout: float | None = None,
+    progress: ProgressCallback | None = None,
+) -> CommandResult:
+    """Run ``command`` streaming merged output lines to ``progress``.
+
+    Forwards each stdout/stderr line to the progress callback while
+    accumulating a bounded tail for error diagnostics.
+    """
+    stdout_parts: list[str] = []
+    stderr_parts: list[str] = []
+    stdout_len = 0
+    stderr_len = 0
+
+    def _keep(parts: list[str], current: int, text: str) -> int:
+        parts.append(text)
+        return current + len(text)
+
+    try:
+        process = subprocess.Popen(  # noqa: S603
+            list(command),
+            cwd=None if cwd is None else str(cwd),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+            bufsize=1,
+        )
+    except OSError as exc:
+        return CommandResult(returncode=-1, stderr=f"{exc.__class__.__name__}: {exc}")
+
+    deadline = None if timeout is None else time.monotonic() + timeout
+    timed_out = False
+
+    # A daemon reader thread drains the pipe into a queue so the main loop
+    # can enforce the deadline even when the child emits no output.
+    import queue
+    import threading
+
+    lines_q: queue.Queue[str | None] = queue.Queue()
+
+    def _reader() -> None:
+        try:
+            if process.stdout is not None:
+                for line in process.stdout:
+                    lines_q.put(line)
+        finally:
+            lines_q.put(None)
+
+    reader = threading.Thread(target=_reader, daemon=True)
+    reader.start()
+    try:
+        while True:
+            if deadline is not None and time.monotonic() > deadline:
+                timed_out = True
+                process.kill()
+                break
+            try:
+                line = lines_q.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            if line is None:
+                break
+            if progress is not None:
+                progress(line.rstrip("\n"))
+            if stdout_len + len(line) <= _STREAM_BUFFER_LIMIT:
+                stdout_len = _keep(stdout_parts, stdout_len, line)
+            elif stdout_parts and not stdout_parts[-1].endswith("…\n"):
+                stdout_len = _keep(stdout_parts, stdout_len, "…\n")
+        returncode = process.wait(
+            timeout=None if deadline is None else max(0.0, deadline - time.monotonic())
+        )
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        returncode = process.returncode if process.returncode is not None else -1
+        timed_out = True
+    finally:
+        if process.stdout is not None:
+            process.stdout.close()
+        reader.join(timeout=1.0)
+        process.wait()
+
+    if timed_out:
+        stderr_len = _keep(stderr_parts, stderr_len, "[bruv] command timed out\n")
+    return CommandResult(
+        returncode=returncode,
+        stdout="".join(stdout_parts),
+        stderr="".join(stderr_parts),
+    )
+
 ProcessSpawner = Callable[..., int]
 """Spawn a detached ``command`` with ``log_path`` and ``env`` keyword arguments; return pid."""
 
@@ -318,6 +437,10 @@ HealthProbe = Callable[[str], bool]
 PortProbe = Callable[[str, int], bool]
 SleepFn = Callable[[float], None]
 MonotonicFn = Callable[[], float]
+DiskFreeFn = Callable[[Path], int | None]
+"""Return free bytes at ``path``, or ``None`` when availability is unknown."""
+ProgressCallback = Callable[[str], None]
+"""Optional observer receiving short human-readable progress messages."""
 
 
 def _default_run(
@@ -460,6 +583,31 @@ def _default_force_kill(pid: int) -> None:
     os.kill(pid, signal.SIGKILL)
 
 
+def _default_disk_free(path: Path) -> int | None:
+    """Best-effort free-byte lookup; ``None`` means availability unknown.
+
+    ``path`` may not exist yet (for example a model cache created on first
+    server start), so the check resolves to the nearest existing ancestor
+    before querying the filesystem. Injected ``disk_free`` implementations
+    are unaffected and keep full control of their own semantics.
+    """
+    probe = path
+    try:
+        while not probe.exists():
+            parent = probe.parent
+            if parent == probe:
+                break
+            probe = parent
+        return shutil.disk_usage(str(probe)).free
+    except OSError:
+        return None
+
+
+def _emit(progress: ProgressCallback | None, message: str) -> None:
+    if progress is not None:
+        progress(message)
+
+
 def _default_health_probe(base_url: str) -> bool:
     try:
         response = httpx.get(base_url + HEALTH_PATH, timeout=2.0)
@@ -491,6 +639,9 @@ class RuntimeDependencies:
     sleep: SleepFn = time.sleep
     monotonic: MonotonicFn = time.monotonic
     wall_time: Callable[[], float] = time.time
+    stream: StreamRunner = _default_stream_run
+    """Streaming runner forwarding git/pip output to the progress callback."""
+    disk_free: DiskFreeFn = _default_disk_free
 
     def now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
@@ -635,6 +786,7 @@ class ManagedSimpleJevRuntime:
         self.startup_timeout = startup_timeout
         self.stop_grace = stop_grace
         self.lock_stale_after = lock_stale_after
+        self._install_progress: ProgressCallback | None = None
 
     # -- manifest -----------------------------------------------------------
 
@@ -763,7 +915,12 @@ class ManagedSimpleJevRuntime:
 
     # -- install ------------------------------------------------------------
 
-    def install(self, *, repair: bool = False) -> InstallReport:
+    def install(
+        self,
+        *,
+        repair: bool = False,
+        progress: ProgressCallback | None = None,
+    ) -> InstallReport:
         """Install or repair the managed runtime and write the manifest.
 
         Steps: validate the host Python, detect NVIDIA preliminarily, clone or
@@ -771,44 +928,136 @@ class ManagedSimpleJevRuntime:
         ``./hf-server`` editable, probe ``torch.cuda.is_available()`` through
         the managed Python, fall back to CPU safely when CUDA is unusable, and
         persist an atomic manifest. Repair rebuilds the venv and manifest.
+
+        Without ``repair``, an installed runtime whose manifest, pinned source
+        revision, venv Python, dependencies, and resolved device/dtype all
+        validate is resumed as-is: source, venv, and pip steps are skipped.
+        ``repair=True`` bypasses resume and rebuilds.
+
+        ``progress`` optionally receives short human-readable phase strings.
         """
         self._validate_host_python()
         deps = self.dependencies
         preliminary_cuda = _preliminary_cuda_detected()
         if repair:
             self._repair_clear_broken_state()
-        self._ensure_source()
-        venv_python = self._ensure_venv(repair=repair)
-        cuda_intent = self.settings.device == "cuda" or (
-            self.settings.device == "auto" and preliminary_cuda
+        else:
+            resumed = self._try_resume_install(preliminary_cuda)
+            if resumed is not None:
+                _emit(progress, "Managed Simple Jev already installed; resuming.")
+                return resumed
+        _emit(progress, "Ensuring pinned Simple Jev source checkout.")
+        self._install_progress = progress
+        try:
+            self._ensure_source()
+            _emit(progress, "Ensuring managed virtual environment.")
+            venv_python = self._ensure_venv(repair=repair)
+            cuda_intent = self.settings.device == "cuda" or (
+                self.settings.device == "auto" and preliminary_cuda
+            )
+            self._preflight_disk(
+                self.paths.root,
+                _DISK_MIN_INSTALL_BYTES,
+                "installing Simple Jev packages",
+                InstallError,
+            )
+            _emit(progress, "Installing Simple Jev packages into the managed venv.")
+            self._pip_install(venv_python, cuda_intent=cuda_intent)
+            cuda_available = self._probe_cuda(venv_python)
+            device = self._resolve_device(cuda_available)
+            dtype = self._resolve_dtype(device)
+            manifest = ManagedManifest(
+                source_revision=self.settings.source_revision,
+                model=self.settings.model,
+                host=self.settings.host,
+                port=self.settings.port,
+                device=device,
+                dtype=dtype,
+                context_length=self.settings.context_length,
+                max_batch_size=self.settings.max_batch_size,
+                max_batch_tokens=self.settings.max_batch_tokens,
+                max_request_branches=self.settings.max_request_branches,
+                venv_python=str(self.paths.venv_python),
+                source_dir=str(self.paths.source),
+                installed_at=deps.now(),
+                updated_at=deps.now(),
+            )
+            self._write_manifest(manifest)
+            _emit(progress, "Managed Simple Jev install complete.")
+            return InstallReport(
+                model=manifest.model,
+                source_revision=manifest.source_revision,
+                python_version=_python_version_string(),
+                device=device,
+                dtype=dtype,
+                cuda_available=cuda_available,
+                preliminary_cuda_detected=preliminary_cuda,
+                source_dir=str(self.paths.source),
+                venv_python=str(self.paths.venv_python),
+                base_url=manifest.base_url,
+            )
+        finally:
+            self._install_progress = None
+
+    def repair(self) -> InstallReport:
+        """Alias for :meth:`install` with repair enabled."""
+        return self.install(repair=True)
+
+    def _try_resume_install(self, preliminary_cuda: bool) -> InstallReport | None:
+        """Return a resume report when the installed runtime fully validates.
+
+        Validation requires: a well-formed manifest matching every current
+        setting, an existing git source checkout at the pinned revision, an
+        existing venv Python plus upstream server script, importable torch in
+        the managed venv, and the same resolved device/dtype the manifest
+        records. Any mismatch returns ``None`` so the full install runs.
+        """
+        manifest = self.read_manifest()
+        if manifest is None:
+            return None
+        settings = self.settings
+        if (
+            manifest.source_revision != settings.source_revision
+            or manifest.model != settings.model
+            or manifest.host != settings.host
+            or manifest.port != settings.port
+            or manifest.context_length != settings.context_length
+            or manifest.max_batch_size != settings.max_batch_size
+            or manifest.max_batch_tokens != settings.max_batch_tokens
+            or manifest.max_request_branches != settings.max_request_branches
+        ):
+            return None
+        source = self.paths.source
+        if not source.is_dir() or not (source / ".git").is_dir():
+            return None
+        if not self.paths.venv_python.is_file():
+            return None
+        if not self.paths.server_script.is_file():
+            return None
+        try:
+            git = self._git()
+        except InstallError:
+            return None
+        head = self.dependencies.run(
+            [git, "-C", str(source), "rev-parse", "HEAD"], timeout=60.0
         )
-        self._pip_install(venv_python, cuda_intent=cuda_intent)
-        cuda_available = self._probe_cuda(venv_python)
+        if head.returncode != 0 or head.stdout.strip() != settings.source_revision:
+            return None
+        if not self._simple_jev_installed(self.paths.venv_python):
+            return None
+        try:
+            cuda_available = self._probe_cuda(self.paths.venv_python)
+        except InstallError:
+            return None
         device = self._resolve_device(cuda_available)
-        dtype = self._resolve_dtype(device)
-        manifest = ManagedManifest(
-            source_revision=self.settings.source_revision,
-            model=self.settings.model,
-            host=self.settings.host,
-            port=self.settings.port,
-            device=device,
-            dtype=dtype,
-            context_length=self.settings.context_length,
-            max_batch_size=self.settings.max_batch_size,
-            max_batch_tokens=self.settings.max_batch_tokens,
-            max_request_branches=self.settings.max_request_branches,
-            venv_python=str(self.paths.venv_python),
-            source_dir=str(self.paths.source),
-            installed_at=deps.now(),
-            updated_at=deps.now(),
-        )
-        self._write_manifest(manifest)
+        if device != manifest.device or self._resolve_dtype(device) != manifest.dtype:
+            return None
         return InstallReport(
             model=manifest.model,
             source_revision=manifest.source_revision,
             python_version=_python_version_string(),
-            device=device,
-            dtype=dtype,
+            device=manifest.device,
+            dtype=manifest.dtype,
             cuda_available=cuda_available,
             preliminary_cuda_detected=preliminary_cuda,
             source_dir=str(self.paths.source),
@@ -816,9 +1065,37 @@ class ManagedSimpleJevRuntime:
             base_url=manifest.base_url,
         )
 
-    def repair(self) -> InstallReport:
-        """Alias for :meth:`install` with repair enabled."""
-        return self.install(repair=True)
+    def _preflight_disk(
+        self,
+        path: Path,
+        required: int,
+        phase: str,
+        error_cls: type[SimpleJevRuntimeError],
+    ) -> None:
+        """Raise ``error_cls`` when free space at ``path`` is below ``required``.
+
+        An unknown availability (``disk_free`` returns ``None``) never blocks.
+        Injected ``disk_free`` implementations keep full control of ancestor
+        resolution; the default resolves one itself.
+        """
+        available = self.dependencies.disk_free(path)
+        if available is None or available >= required:
+            return
+        raise error_cls(
+            message=(
+                f"Not enough free disk space at {path} for {phase}: "
+                f"{available} bytes available, {required} bytes required."
+            ),
+            action=(
+                f"Free at least {required} bytes at {path} (or point bruv at a "
+                "location with more space), then retry."
+            ),
+            details={
+                "path": str(path),
+                "required_bytes": required,
+                "available_bytes": available,
+            },
+        )
 
     def _validate_host_python(self) -> None:
         if sys.version_info < _PY_312:
@@ -843,6 +1120,33 @@ class ManagedSimpleJevRuntime:
             )
         return git
 
+    def _simple_jev_installed(self, venv_python: Path) -> bool:
+        """Confirm the simple-jev distribution is importable via pip metadata."""
+        result = self.dependencies.run(
+            [str(venv_python), "-m", "pip", "show", "simple-jev"],
+            timeout=60.0,
+        )
+        return result.returncode == 0
+
+    def _run_maybe_stream(
+        self,
+        command: Sequence[str],
+        *,
+        cwd: Path | None = None,
+        timeout: float | None = None,
+    ) -> CommandResult:
+        """Run ``command`` streaming output to the active install progress.
+
+        Without an active progress callback the non-streaming ``run`` runner
+        keeps prior injected behavior.
+        """
+        progress = getattr(self, "_install_progress", None)
+        if progress is None:
+            return self.dependencies.run(command, cwd=cwd, timeout=timeout)
+        return self.dependencies.stream(
+            command, cwd=cwd, timeout=timeout, progress=progress
+        )
+
     def _run_checked(
         self,
         command: Sequence[str],
@@ -851,7 +1155,7 @@ class ManagedSimpleJevRuntime:
         timeout: float | None = None,
         failure_message: str,
     ) -> CommandResult:
-        result = self.dependencies.run(command, cwd=cwd, timeout=timeout)
+        result = self._run_maybe_stream(command, cwd=cwd, timeout=timeout)
         if result.returncode != 0:
             raise InstallError(
                 message=(
@@ -891,7 +1195,7 @@ class ManagedSimpleJevRuntime:
         # Refresh the checkout to the pinned revision. Fetching the exact
         # revision first keeps traffic small; fall back to a full fetch when
         # the server refuses direct SHA fetches.
-        fetch_pin = self.dependencies.run(
+        fetch_pin = self._run_maybe_stream(
             [git, "-C", str(source), "fetch", "origin", revision],
             timeout=300.0,
         )
@@ -1155,12 +1459,14 @@ class ManagedSimpleJevRuntime:
 
     # -- start --------------------------------------------------------------
 
-    def start(self) -> StartOutcome:
+    def start(self, *, progress: ProgressCallback | None = None) -> StartOutcome:
         """Start the managed server, or reuse an already healthy instance.
 
         Cleans up stale PID files, diagnoses occupied ports, and guards the
         launch with an atomic directory lock so two bruv processes never race
-        to start the same server.
+        to start the same server. ``progress`` optionally receives phase
+        messages plus bounded excerpts of new managed server-log lines while
+        waiting for health.
         """
         manifest = self._require_manifest()
         deps = self.dependencies
@@ -1168,7 +1474,9 @@ class ManagedSimpleJevRuntime:
         existing = self._read_pid_record()
         if existing is not None:
             if self._pid_is_ours(existing):
-                waited = self._wait_until_healthy(base_url, self.startup_timeout)
+                waited = self._wait_until_healthy(
+                    base_url, self.startup_timeout, progress=progress
+                )
                 if self.dependencies.health_probe(base_url):
                     return StartOutcome(
                         pid=existing.pid,
@@ -1239,9 +1547,17 @@ class ManagedSimpleJevRuntime:
                     ),
                 )
             command = self._server_command(manifest)
+            self._preflight_disk(
+                self.paths.model_cache,
+                _DISK_MIN_MODEL_BYTES,
+                "model download and server startup",
+                StartError,
+            )
             pid = deps.spawn(command, self.paths.log_file, env=self._server_env())
             self._write_pid_record(pid, command, base_url)
-            waited = self._wait_until_healthy(base_url, self.startup_timeout)
+            waited = self._wait_until_healthy(
+                base_url, self.startup_timeout, progress=progress
+            )
         if self.dependencies.health_probe(base_url):
             return StartOutcome(
                 pid=pid,
@@ -1347,22 +1663,61 @@ class ManagedSimpleJevRuntime:
             waited_seconds=0.0,
         )
 
-    def _wait_until_healthy(self, base_url: str, timeout: float) -> float:
+    def _wait_until_healthy(
+        self,
+        base_url: str,
+        timeout: float,
+        progress: ProgressCallback | None = None,
+    ) -> float:
         """Poll ``/health`` until healthy or ``timeout`` elapses.
 
         Returns the actual elapsed wait in seconds, including on timeout, so
         outcomes report real elapsed time rather than the nominal budget.
+        With ``progress``, only new bytes appended to the managed log since
+        the wait started are forwarded, bounded to
+        ``_SERVER_LOG_FORWARD_LIMIT`` characters; the log file itself is only
+        ever read, never truncated or modified.
         """
         deps = self.dependencies
         started = deps.monotonic()
         deadline = started + timeout
+        log_offset = self._log_size()
+        pending = ""
         while True:
             if deps.health_probe(base_url):
                 return max(0.0, deps.monotonic() - started)
+            if progress is not None:
+                log_offset, text = self._drain_new_log(log_offset)
+                if text:
+                    pending = (pending + text)[-_SERVER_LOG_FORWARD_LIMIT:]
+                    tail = _excerpt(pending, _SERVER_LOG_EXCERPT_LIMIT)
+                    if tail:
+                        progress(f"server: {tail}")
             remaining = deadline - deps.monotonic()
             if remaining <= 0:
                 return max(0.0, deps.monotonic() - started)
             deps.sleep(min(1.0, remaining))
+
+    def _log_size(self) -> int:
+        try:
+            return self.paths.log_file.stat().st_size
+        except OSError:
+            return 0
+
+    def _drain_new_log(self, offset: int) -> tuple[int, str]:
+        """Read log bytes appended after ``offset``; return new offset + text."""
+        size = self._log_size()
+        if size <= offset:
+            return offset, ""
+        try:
+            with open(self.paths.log_file, "rb") as handle:
+                handle.seek(offset)
+                data = handle.read(size - offset)
+        except OSError:
+            return offset, ""
+        if not data:
+            return offset, ""
+        return size, data.decode("utf-8", "replace")
 
     @contextmanager
     def _startup_lock(self) -> Iterator[None]:
@@ -1497,7 +1852,7 @@ class ManagedSimpleJevRuntime:
 
     # -- ensure_running -----------------------------------------------------
 
-    def ensure_running(self) -> StartOutcome:
+    def ensure_running(self, *, progress: ProgressCallback | None = None) -> StartOutcome:
         """Idempotent entry point for the backend factory and CLI setup.
 
         Reuses a healthy managed server, starts a stopped one, and raises an
@@ -1520,7 +1875,7 @@ class ManagedSimpleJevRuntime:
                 reused=True,
                 waited_seconds=0.0,
             )
-        return self.start()
+        return self.start(progress=progress)
 
 
 __all__ = [
@@ -1550,4 +1905,5 @@ __all__ = [
     "StopOutcome",
     "UnsafeStopError",
     "UPSTREAM_URL",
+    "ProgressCallback",
 ]

@@ -55,9 +55,22 @@ bruv setup simple-jev
   leaves no persistent pip cache on disk.
 - The first install downloads the default `Qwen/Qwen3.5-0.8B` model from
   Hugging Face into the managed cache. This can take several minutes.
+- During setup, bruv warns that the default Qwen model in Noul mode can be
+  non-discriminating (it may score very similar options alike). The same
+  warning is shown once on your first affected use.
+- Simple Jev reports `calibrated: false`; its score is not a verified
+  real-world probability and must not be presented as probability or
+  calibrated confidence.
 - After setup, normal simple-jev calls auto-start the managed server and
-  reuse it if it is already healthy.
-- If managed state breaks, run `bruv setup simple-jev --repair` to rebuild it.
+  reuse it if it is already healthy. Rerunning `bruv setup simple-jev` is safe:
+  it verifies the existing install and resumes automatically, skipping steps
+  that are already complete.
+- Use `bruv setup simple-jev --repair` to force a full rebuild of managed
+  state when something is broken or you want a clean rebuild.
+- Before downloading packages or the model, setup runs a disk-space preflight
+  and fails early with the required and available space if disk is too low.
+- Setup streams visible progress to your terminal: git and pip output, plus
+  model-loading progress, so you can see each step as it runs.
 
 Control the managed server directly:
 
