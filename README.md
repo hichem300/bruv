@@ -9,6 +9,57 @@ honest calibration disclosure.
 
 The tagline is brand voice, not an accuracy guarantee.
 
+## How bruv works
+
+```
+noul / choice / score / eval
+        |
+        v
++-------------------------------------------------------------+
+| CLI: parse args, load config, build canonical request,      |
+|      validate before any paid call                          |
++-------------------------------------------------------------+
+        |
+        v
++-------------------------------------------------------------+
+| Registry-backed backend factory                             |
+|  - simple-jev  -> local or HTTP managed runtime             |
+|  - openrouter  -> calibrated Decisions API                  |
+|  - typesafe    -> TypeSafe API                              |
+|  - needle/rlcd -> local model backends                      |
++-------------------------------------------------------------+
+        |
+        v
++-------------------------------------------------------------+
+| Provider adapters -> canonical DecisionResult               |
++-------------------------------------------------------------+
+        |
+        v
++-------------------------------------------------------------+
+| Honest calibration, warnings, evidence gates                |
+|  (abstain / insufficient evidence surfaced, not hidden)     |
++-------------------------------------------------------------+
+        |
+        v
+  Human-readable output          --output json for scripts
+```
+
+Managed Simple Jev setup and diagnostics:
+
+```
+bruv setup simple-jev
+        |
+        v
+  install already valid? --yes--> verify + resume (skip done steps)
+        | no
+        v
+  disk preflight --> clone source --> venv --> dependencies
+        --> model cache --> server start --> smoke request
+        |
+        v
+bruv doctor: non-paid diagnostics, one fix per failed item
+```
+
 ## 60-second install and first result
 
 ```bash
