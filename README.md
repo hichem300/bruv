@@ -11,53 +11,113 @@ The tagline is brand voice, not an accuracy guarantee.
 
 ## How bruv works
 
-```
-noul / choice / score / eval
-        |
-        v
-+-------------------------------------------------------------+
-| CLI: parse args, load config, build canonical request,      |
-|      validate before any paid call                          |
-+-------------------------------------------------------------+
-        |
-        v
-+-------------------------------------------------------------+
-| Registry-backed backend factory                             |
-|  - simple-jev  -> local or HTTP managed runtime             |
-|  - openrouter  -> calibrated Decisions API                  |
-|  - typesafe    -> TypeSafe API                              |
-|  - needle/rlcd -> local model backends                      |
-+-------------------------------------------------------------+
-        |
-        v
-+-------------------------------------------------------------+
-| Provider adapters -> canonical DecisionResult               |
-+-------------------------------------------------------------+
-        |
-        v
-+-------------------------------------------------------------+
-| Honest calibration, warnings, evidence gates                |
-|  (abstain / insufficient evidence surfaced, not hidden)     |
-+-------------------------------------------------------------+
-        |
-        v
-  Human-readable output          --output json for scripts
+```text
+                         HOW `bruv` WORKS
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  1. USER COMMAND                                                            │
+│                                                                             │
+│  bruv noul   "Is this a refund?" --state "I want my money back"             │
+│  bruv choice "Route this lead" --option sales --option support              │
+│  bruv score  "Rate urgency" --level low --level medium --level high         │
+│  bruv eval request.json                                                     │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  2. CLI                                                                     │
+│                                                                             │
+│  Parse command → load config → build canonical request → validate input     │
+│                                                                             │
+│      state + questions + criteria/options + selected model/backend          │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  3. BACKEND FACTORY                                                         │
+│                                                                             │
+│  Reads configured backend and selects matching adapter                      │
+└───────────┬─────────────┬─────────────┬─────────────┬───────────────────────┘
+            │             │             │             │
+            ▼             ▼             ▼             ▼
+   ┌────────────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐
+   │ Simple Jev     │ │OpenRouter│ │ TypeSafe │ │ Needle / RLCD    │
+   │ local or HTTP  │ │Decisions │ │ hosted   │ │ local models     │
+   │ uncalibrated   │ │calibrated│ │calibrated│ │ calibrated       │
+   └───────┬────────┘ └────┬─────┘ └────┬─────┘ └────────┬─────────┘
+           │               │            │                │
+           ▼               ▼            ▼                ▼
+   ┌────────────────┐   Typed HTTP requests       Local model inference
+   │ Managed runtime│
+   │                │
+   │ verify install │
+   │ resume setup   │
+   │ check disk     │
+   │ start server   │
+   │ load model     │
+   │ health check   │
+   └───────┬────────┘
+           │
+           ▼
+   Simple Jev classifier
+           │
+           └──────────────────┬──────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  4. PROVIDER ADAPTER                                                        │
+│                                                                             │
+│  Provider response → validate schema → normalize into one bruv contract     │
+│                                                                             │
+│  DecisionResult                                                             │
+│  ├── backend                                                                │
+│  ├── model                                                                  │
+│  ├── calibrated: true | false                                               │
+│  ├── answers                                                                │
+│  └── usage / metadata                                                       │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  5. SAFETY + HONESTY                                                        │
+│                                                                             │
+│  • Warn about non-discriminating model/mode combinations                    │
+│  • Never describe uncalibrated scores as real-world probabilities           │
+│  • Apply fail-under / abstain gates when requested                           │
+│  • Return meaningful exit codes for automation                              │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  6. OUTPUT                                                                  │
+│                                                                             │
+│  Human terminal output | JSON | selected field | shell exit code            │
+│                                                                             │
+│  backend: simple-jev                                                       │
+│  model: Qwen/Qwen3.5-0.8B                                                  │
+│  calibration: uncalibrated                                                  │
+│  q1: 0.011                                                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Managed Simple Jev setup and diagnostics:
+Setup flow:
 
-```
+```text
 bruv setup simple-jev
-        |
-        v
-  install already valid? --yes--> verify + resume (skip done steps)
-        | no
-        v
-  disk preflight --> clone source --> venv --> dependencies
-        --> model cache --> server start --> smoke request
-        |
-        v
-bruv doctor: non-paid diagnostics, one fix per failed item
+        │
+        ├── existing install valid? ── yes ──► resume
+        │
+        └── no
+             ├── check disk space
+             ├── fetch pinned source
+             ├── create isolated environment
+             ├── install CPU/CUDA dependencies
+             ├── download/cache model
+             ├── start server
+             ├── smoke test
+             └── ready
+
+bruv doctor
+        └── config → credentials → endpoint → reachability → capabilities
 ```
 
 ## 60-second install and first result
