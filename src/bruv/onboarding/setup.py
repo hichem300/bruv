@@ -119,6 +119,120 @@ _HANDLERS: dict[str, _BackendSetupHandler] = {
 }
 
 
+def _managed_simple_jev_setup(
+    *,
+    confirm: ConfirmFn,
+    print_line: PrintFn,
+    config_path: Path | None,
+    repair: bool,
+) -> SetupResult:
+    """Install, persist, launch, and smoke-test the managed Simple Jev runtime."""
+    import httpx
+
+    from bruv.backends.simple_jev import SimpleJevAdapter
+    from bruv.config import update_config
+    from bruv.domain.questions import NoulQuestion
+    from bruv.domain.requests import DecisionRequest
+    from bruv.onboarding.simple_jev_runtime import (
+        ManagedSimpleJevRuntime,
+        ManagedSimpleJevSettings,
+        SimpleJevPaths,
+    )
+
+    settings = ManagedSimpleJevSettings()
+    paths = SimpleJevPaths.default()
+
+    print_line(f"Model: {settings.model}")
+    print_line(
+        "Device: auto (auto-detects CUDA through the managed torch and "
+        "falls back to CPU when unavailable)"
+    )
+    print_line(f"Endpoint: {settings.base_url}")
+    print_line(
+        "Simple Jev will be installed isolated under "
+        f"{paths.root}; nothing is written outside that managed root."
+    )
+    print_line(
+        "First launch downloads the model from Hugging Face into the "
+        "managed cache and can take several minutes."
+    )
+    if not confirm("Install and start the managed Simple Jev runtime now?"):
+        print_line("Cancelled. Nothing was installed or persisted.")
+        return SetupResult(
+            backend="simple-jev", persisted=False, next_command="bruv setup simple-jev"
+        )
+
+    runtime = ManagedSimpleJevRuntime(settings)
+    report = runtime.install(repair=repair)
+
+    update_config(
+        {
+            "backend": "simple-jev",
+            "simple_jev_managed": True,
+            "simple_jev_model": report.model,
+            "simple_jev_base_url": report.base_url,
+            "simple_jev_device": report.device,
+            "simple_jev_dtype": settings.dtype,
+        },
+        path=config_path,
+    )
+
+    outcome = runtime.ensure_running()
+
+    try:
+        with httpx.Client() as client:
+            adapter = SimpleJevAdapter(
+                base_url=outcome.base_url,
+                model=report.model,
+                client=client,
+            )
+            request = DecisionRequest(
+                state=None,
+                questions={
+                    "smoke": NoulQuestion(instructions="Answer true.")
+                },
+            )
+            result = adapter.evaluate(request)
+    except Exception as exc:  # noqa: BLE001 - converted to actionable unpaid error
+        raise ConfigurationError(
+            message=(
+                "Managed Simple Jev smoke classification failed "
+                f"({exc.__class__.__name__}); the runtime is installed and the "
+                "config is persisted, but the endpoint did not answer "
+                "correctly."
+            ),
+            paid_request=False,
+            action=(
+                "Run `bruv serve simple-jev status` and inspect the managed "
+                f"log at {paths.log_file}. Fix or restart the server, then "
+                "retry `bruv setup simple-jev`."
+            ),
+            details={"log_file": str(paths.log_file)},
+        ) from exc
+    if not result.answers:
+        raise ConfigurationError(
+            message=(
+                "Managed Simple Jev smoke classification returned no answers; "
+                "the runtime is installed and the config is persisted, but the "
+                "endpoint response was empty."
+            ),
+            paid_request=False,
+            action=(
+                "Run `bruv serve simple-jev status` and inspect the managed "
+                f"log at {paths.log_file}, then retry "
+                "`bruv setup simple-jev`."
+            ),
+            details={"log_file": str(paths.log_file)},
+        )
+
+    print_line(
+        f"Simple Jev ready at {outcome.base_url} "
+        f"(model {report.model}, device {report.device})."
+    )
+    print_line("Ready: bruv doctor")
+    return SetupResult(backend="simple-jev", persisted=True, next_command="bruv doctor")
+
+
 def run_setup(
     *,
     prompt: PromptFn,
@@ -127,9 +241,36 @@ def run_setup(
     env: Mapping[str, str],
     config_path: Path | None = None,
     credential_path: Path | None = None,
+    preselected_backend: str | None = None,
+    repair: bool = False,
 ) -> SetupResult:
-    """Interactive setup. Non-interactive callers should refuse before this."""
+    """Interactive setup. Non-interactive callers should refuse before this.
+
+    ``preselected_backend`` skips the menu when it names a registered backend;
+    an unknown value falls back to the interactive menu unchanged.
+    """
     from bruv.backends.registry import backend_names, get_backend_definition
+
+    if preselected_backend is not None:
+        if preselected_backend not in backend_names:
+            print_line(
+                f"Unknown preselected backend {preselected_backend!r}; "
+                "showing the backend menu."
+            )
+        elif preselected_backend == "simple-jev":
+            return _managed_simple_jev_setup(
+                confirm=confirm,
+                print_line=print_line,
+                config_path=config_path,
+                repair=repair,
+            )
+        else:
+            return _HANDLERS[preselected_backend](
+                prompt=prompt,
+                confirm=confirm,
+                print_line=print_line,
+                credential_path=credential_path,
+            )
 
     print_line("bruv setup: choose a backend.")
     for name in backend_names:

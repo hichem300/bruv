@@ -423,14 +423,22 @@ def skill_command(
 
 
 @app.command()
-def setup() -> None:
+def setup(
+    backend: Annotated[
+        str | None, typer.Argument(help="Backend to set up, e.g. simple-jev.")
+    ] = None,
+    repair: Annotated[
+        bool, typer.Option("--repair", help="Repair the managed Simple Jev install.")
+    ] = False,
+) -> None:
     """Guided credential and backend setup (interactive only)."""
     import sys
 
     if not sys.stdin.isatty():
         typer.echo(
-            "error: `bruv setup` is interactive. Set TYPESAFE_API_KEY or edit the "
-            "config file in a non-interactive environment.",
+            "error: `bruv setup` is interactive. Set TYPESAFE_API_KEY, set "
+            "SIMPLE_JEV_BASE_URL, or edit the config file in a "
+            "non-interactive environment.",
             err=True,
         )
         raise typer.Exit(code=2)
@@ -442,12 +450,97 @@ def setup() -> None:
             confirm=typer.confirm,
             print_line=lambda msg: typer.echo(msg),
             env={},
+            preselected_backend=backend,
+            repair=repair,
         )
     except Exception as exc:  # noqa: BLE001
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(code=2) from exc
     typer.echo(f"backend: {result.backend}")
     typer.echo(f"next: {result.next_command}")
+
+
+serve_app = typer.Typer(help="Manage the local Simple Jev server.")
+app.add_typer(serve_app, name="serve")
+
+
+@serve_app.command("simple-jev")
+def serve_simple_jev(
+    action: Annotated[str, typer.Argument(help="status|start|stop.")],
+) -> None:
+    """Control the managed local Simple Jev server."""
+    from urllib.parse import urlsplit
+
+    from bruv.onboarding.simple_jev_runtime import (
+        ManagedSimpleJevRuntime,
+        ManagedSimpleJevSettings,
+        NotRunningError,
+    )
+
+    if action not in ("status", "start", "stop"):
+        typer.echo(
+            f"error: unsupported action {action!r}; use status, start, or stop", err=True
+        )
+        raise typer.Exit(code=2)
+
+    def _serve_error(error: ApplicationError) -> typer.Exit:
+        typer.echo(render_human_error(error), err=True)
+        return typer.Exit(code=exit_code_for(CommandOutcome(error=error)))
+
+    try:
+        config = load_config()
+    except ApplicationError as error:
+        raise _serve_error(error) from error
+
+    parsed = urlsplit(str(config.simple_jev_base_url))
+    settings = ManagedSimpleJevSettings(
+        model=config.simple_jev_model,
+        host=parsed.hostname or "127.0.0.1",
+        port=parsed.port or 8000,
+        device=config.simple_jev_device,
+        dtype=config.simple_jev_dtype,
+    )
+    runtime = ManagedSimpleJevRuntime(settings)
+
+    try:
+        if action == "status":
+            report = runtime.status()
+        elif action == "start":
+            outcome = runtime.start()
+        else:
+            outcome = runtime.stop()
+    except NotRunningError:
+        if action == "stop":
+            typer.echo("not-running")
+            raise typer.Exit(code=0) from None
+        raise
+    except ApplicationError as error:
+        raise _serve_error(error) from error
+
+    if action == "status":
+        typer.echo(f"installed: {report.installed}")
+        typer.echo(f"running: {report.running}")
+        typer.echo(f"healthy: {report.healthy}")
+        typer.echo(f"pid: {report.pid}")
+        typer.echo(f"model: {report.model}")
+        typer.echo(f"device: {report.device}")
+        typer.echo(f"base_url: {report.base_url}")
+        for issue in report.issues:
+            typer.echo(f"issue: {issue}")
+        if not (report.running and report.healthy):
+            raise typer.Exit(code=1)
+        raise typer.Exit(code=0)
+
+    if action == "start":
+        state = "reused" if outcome.reused else "started"
+        typer.echo(f"{state}: pid={outcome.pid} url={outcome.base_url}")
+        raise typer.Exit(code=0)
+
+    if outcome.stopped:
+        typer.echo(f"stopped: pid={outcome.pid}")
+    else:
+        typer.echo(f"not-running: pid={outcome.pid}")
+    raise typer.Exit(code=0)
 
 
 @app.command()

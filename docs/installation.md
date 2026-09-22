@@ -34,6 +34,38 @@ bruv --help
 bruv doctor
 ```
 
+## Managed Simple Jev backend (optional)
+
+Simple Jev talks to a local Simple Jev server. bruv can install and manage
+that server for you:
+
+```bash
+bruv setup simple-jev
+```
+
+- Installs an isolated runtime under your platform user-data directory at
+  `bruv/simple-jev`. The upstream checkout, virtual environment, model cache,
+  state files, and logs all live inside that one managed root; nothing is
+  written outside it.
+- Device selection is `auto`: bruv probes CUDA through the managed torch and
+  falls back to CPU safely when CUDA is unusable.
+- The first install downloads the default `Qwen/Qwen3.5-0.8B` model from
+  Hugging Face into the managed cache. This can take several minutes.
+- After setup, normal simple-jev calls auto-start the managed server and
+  reuse it if it is already healthy.
+- If managed state breaks, run `bruv setup simple-jev --repair` to rebuild it.
+
+Control the managed server directly:
+
+```bash
+bruv serve simple-jev status
+bruv serve simple-jev start
+bruv serve simple-jev stop
+```
+
+Check everything with `bruv doctor` after setup. git is required for the
+managed install.
+
 ## Needle backend (optional)
 
 Needle runs the Needle 3 model fully on your machine. No credential needed.

@@ -21,7 +21,8 @@ No credential is ever stored in the config file.
 - `JEV_BACKEND`: `typesafe`, `simple-jev`, `needle`, or `rlcd-modernbert`.
 - `TYPESAFE_API_KEY`: TypeSafe API key (never a CLI flag).
 - `TYPESAFE_ENDPOINT`: optional TypeSafe base URL.
-- `SIMPLE_JEV_BASE_URL`: Simple Jev base URL.
+- `SIMPLE_JEV_BASE_URL`: Simple Jev base URL. Setting it configures a custom
+  endpoint and disables managed auto-start (see below).
 - `BRUV_OUTPUT`: `human` or `json`.
 
 ## Credentials
@@ -29,6 +30,58 @@ No credential is ever stored in the config file.
 `bruv setup` stores the TypeSafe key in a protected credential file (mode 0600
 on POSIX, user-only ACL on Windows). If secure permissions cannot be applied,
 setup refuses persistence and recommends the environment variable.
+
+## Managed Simple Jev
+
+With `bruv setup simple-jev` (see `docs/installation.md`), the setup writes
+`simple_jev_managed = true` into the config file:
+
+```toml
+backend = "simple-jev"
+simple_jev_managed = true
+```
+
+While that flag is set, every normal simple-jev call auto-starts the managed
+server under your platform user-data directory at `bruv/simple-jev` and
+reuses it when healthy. Device (`auto` with CUDA detection and CPU fallback),
+dtype, and model can be tuned in the config file:
+
+```toml
+simple_jev_model = "Qwen/Qwen3.5-0.8B"
+simple_jev_device = "auto"   # auto (CUDA with CPU fallback), cpu, or cuda
+simple_jev_dtype = "bfloat16"
+```
+
+The managed server is controlled with `bruv serve simple-jev
+status|start|stop`, and `bruv setup simple-jev --repair` rebuilds broken
+managed state.
+
+### Custom endpoint
+
+Setting `SIMPLE_JEV_BASE_URL` (or `simple_jev_base_url` in the config file)
+to a non-default value disables managed auto-start: bruv talks to that
+endpoint and never starts a local server. The default base URL is
+`http://127.0.0.1:8000`.
+
+A related key sets the model name sent to the endpoint:
+
+```toml
+simple_jev_model = "Qwen/Qwen3.5-0.8B"
+```
+
+### Public demo endpoint
+
+No local runtime or key is needed if you point Simple Jev at the public
+Featherless demo endpoint:
+
+```toml
+simple_jev_base_url = "https://simple-jev-demo-api.featherless.ai/v1/"
+simple_jev_model = "featherless-ai/gemma-4-26B-A4B-classifier"
+```
+
+The demo endpoint needs no key but is rate limited, so it is suitable for
+trying bruv out, not for sustained use. The managed Simple Jev backend stays
+uncalibrated in all cases: bruv always reports `calibrated: false`.
 
 ## Needle backend
 

@@ -39,6 +39,35 @@ bruv skill install --target claude --scope project --project-root /path/to/repo
 
 See `docs/agent-usage.md`.
 
+## Managed Simple Jev
+
+Simple Jev runs locally. `bruv setup simple-jev` installs an isolated runtime
+(server, venv, model cache, and logs) under your platform user-data directory
+at `bruv/simple-jev`, auto-detects CUDA and falls back to CPU, and downloads
+the `Qwen/Qwen3.5-0.8B` model on first install.
+
+After setup, normal simple-jev calls auto-start and reuse the managed server.
+
+```bash
+bruv setup simple-jev                 # install + start managed runtime
+bruv serve simple-jev status          # installed / running / healthy / pid
+bruv serve simple-jev start
+bruv serve simple-jev stop
+bruv setup simple-jev --repair        # rebuild broken managed state
+```
+
+Prefer a custom endpoint? Set `SIMPLE_JEV_BASE_URL` to disable managed
+auto-start and call your own server. No local runtime at all? Point it at the
+public Featherless demo endpoint, which needs no key but is rate limited and
+serves `featherless-ai/gemma-4-26B-A4B-classifier`:
+
+```bash
+export SIMPLE_JEV_BASE_URL="https://simple-jev-demo-api.featherless.ai/v1/"
+export SIMPLE_JEV_MODEL="featherless-ai/gemma-4-26B-A4B-classifier"
+```
+
+Simple Jev stays uncalibrated: bruv always reports `calibrated: false`.
+
 ## Funnel audit demo
 
 ```bash
