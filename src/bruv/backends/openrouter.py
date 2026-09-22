@@ -332,8 +332,24 @@ class OpenRouterAdapter(DecisionBackend):
 
         usage = None
         if "usage" in body:
+            usage_payload = body["usage"]
+            if not isinstance(usage_payload, dict):
+                raise ProviderResponseError(
+                    message="OpenRouter usage must be a JSON object.",
+                    paid_request=True,
+                    action="Retry the request; report the response if it persists.",
+                )
+            # Live Decisions API usage carries extra fields (for example
+            # ``cost``); map only the canonical token counts and validate
+            # them through the canonical Usage model so extra fields are
+            # ignored safely.
             try:
-                usage = _USAGE_ADAPTER.validate_python(body["usage"])
+                usage = _USAGE_ADAPTER.validate_python(
+                    {
+                        "input_tokens": usage_payload.get("input_tokens"),
+                        "output_tokens": usage_payload.get("output_tokens"),
+                    }
+                )
             except ValidationError as exc:
                 raise ProviderResponseError(
                     message="OpenRouter usage did not match canonical schema.",
@@ -341,10 +357,12 @@ class OpenRouterAdapter(DecisionBackend):
                     action="Retry the request; report the response if it persists.",
                 ) from exc
 
-        request_id = body.get("request_id")
-        if request_id is not None and not isinstance(request_id, str):
+        request_id = body.get("request_id", body.get("id"))
+        if request_id is not None and (
+            not isinstance(request_id, str) or not request_id.strip()
+        ):
             raise ProviderResponseError(
-                message="OpenRouter request_id must be a string.",
+                message="OpenRouter request_id must be a nonblank string.",
                 paid_request=True,
                 action="Retry the request; report the response if it persists.",
             )
