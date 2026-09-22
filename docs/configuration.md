@@ -18,18 +18,22 @@ No credential is ever stored in the config file.
 
 ## Environment variables
 
-- `JEV_BACKEND`: `typesafe`, `simple-jev`, `needle`, or `rlcd-modernbert`.
+- `JEV_BACKEND`: `typesafe`, `openrouter`, `simple-jev`, `needle`, or `rlcd-modernbert`.
 - `TYPESAFE_API_KEY`: TypeSafe API key (never a CLI flag).
 - `TYPESAFE_ENDPOINT`: optional TypeSafe base URL.
+- `OPENROUTER_API_KEY`: OpenRouter API key (never a CLI flag).
+- `OPENROUTER_MODEL`: OpenRouter model slug. Defaults to `~typesafe/jev-latest`;
+  an explicit model slug must be configured when using any other model.
 - `SIMPLE_JEV_BASE_URL`: Simple Jev base URL. Setting it configures a custom
   endpoint and disables managed auto-start (see below).
 - `BRUV_OUTPUT`: `human` or `json`.
 
 ## Credentials
 
-`bruv setup` stores the TypeSafe key in a protected credential file (mode 0600
-on POSIX, user-only ACL on Windows). If secure permissions cannot be applied,
-setup refuses persistence and recommends the environment variable.
+`bruv setup` stores keys in a protected credential file (mode 0600 on POSIX,
+user-only ACL on Windows). The file can contain both the TypeSafe key and the
+OpenRouter key. If secure permissions cannot be applied, setup refuses
+persistence and recommends the environment variable.
 
 ## Managed Simple Jev
 
@@ -97,6 +101,25 @@ Needle reports a single confidence value per answer. It does not emit
 probability distributions, and bruv never synthesizes them. For `score`
 questions Needle selects one level index from the supplied legend; the answer
 carries that index and the legend itself.
+
+## OpenRouter backend
+
+Set `backend = "openrouter"` in the config file or pass `--backend openrouter`.
+OpenRouter uses calibrated typed Decisions API at `POST /api/alpha/decisions`,
+not Chat Completions.
+
+Config keys:
+
+```toml
+openrouter_model = "~typesafe/jev-latest"
+openrouter_data_collection = false
+openrouter_zdr = false
+```
+
+- `openrouter_model`: model slug sent to OpenRouter. Defaults to
+  `~typesafe/jev-latest`; an explicit slug is required for other models.
+- `openrouter_data_collection`: OpenRouter data-collection preference.
+- `openrouter_zdr`: OpenRouter zero-data-retention preference.
 
 ## RLCD ModernBERT backend
 

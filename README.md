@@ -72,6 +72,28 @@ export SIMPLE_JEV_MODEL="featherless-ai/gemma-4-26B-A4B-classifier"
 
 Simple Jev stays uncalibrated: bruv always reports `calibrated: false`.
 
+## OpenRouter (paid, hosted)
+
+OpenRouter serves TypeSafe Jev as a paid hosted backend using OpenRouter's
+calibrated typed Decisions API (`POST https://openrouter.ai/api/alpha/decisions`),
+not Chat Completions. That endpoint returns calibrated probabilities, so bruv
+reports `calibrated: true`.
+
+```bash
+bruv setup openrouter   # stores key in a protected credential file, no paid call
+bruv choice "Which team?" --option sales --option billing --state "help" --backend openrouter
+```
+
+- The default model is `~typesafe/jev-latest`. Pricing per the current model
+  page: $0.042 per 1M input tokens, zero cost for output tokens.
+- `bruv setup openrouter` never makes a paid call; it only validates and stores
+  the key.
+- Credentials: set `OPENROUTER_API_KEY`, or let setup store it in the same
+  protected credential file used for TypeSafe keys. The key is never a CLI
+  flag and never lands in the config file.
+- Model: `~typesafe/jev-latest` by default; override with `OPENROUTER_MODEL`.
+  bruv requires a concrete model slug and rejects `openrouter/auto`.
+
 ## Funnel audit demo
 
 ```bash
@@ -82,6 +104,8 @@ bruv demo funnel-audit --backend simple-jev --execute  # real evaluation
 ## Backends and calibration
 
 - TypeSafe Jev: hosted, calibrated probabilities (population-level).
+- OpenRouter: paid hosted access to `~typesafe/jev-latest` via OpenRouter's
+  calibrated typed Decisions API; calibrated probabilities, `calibrated: true`.
 - Simple Jev: local/self-hosted, explicitly uncalibrated. bruv always reports
   `calibrated: false` for Simple Jev.
 - Needle: local Needle 3 inference, no key needed. Optional extra:

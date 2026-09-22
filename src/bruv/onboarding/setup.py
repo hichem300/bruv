@@ -15,6 +15,8 @@ from typing import Protocol
 from bruv.application import ConfigurationError
 from bruv.onboarding.credentials import CREDENTIAL_ENV, save_credentials
 
+DEFAULT_OPENROUTER_MODEL = "~typesafe/jev-latest"
+
 PromptFn = Callable[[str], str]
 ConfirmFn = Callable[[str], bool]
 PrintFn = Callable[[str], None]
@@ -35,6 +37,7 @@ class _BackendSetupHandler(Protocol):
         confirm: ConfirmFn,
         print_line: PrintFn,
         credential_path: Path | None,
+        config_path: Path | None,
     ) -> SetupResult: ...
 
 
@@ -44,6 +47,7 @@ def _typesafe_handler(
     confirm: ConfirmFn,
     print_line: PrintFn,
     credential_path: Path | None,
+    config_path: Path | None,
 ) -> SetupResult:
     api_key = prompt("TypeSafe API key (input hidden)")
     if not api_key.strip():
@@ -67,6 +71,7 @@ def _simple_jev_handler(
     confirm: ConfirmFn,
     print_line: PrintFn,
     credential_path: Path | None,
+    config_path: Path | None,
 ) -> SetupResult:
     base_url = prompt("Simple Jev base URL [http://127.0.0.1:8000]").strip()
     if not base_url:
@@ -82,6 +87,7 @@ def _needle_handler(
     confirm: ConfirmFn,
     print_line: PrintFn,
     credential_path: Path | None,
+    config_path: Path | None,
 ) -> SetupResult:
     from bruv.backends.registry import get_backend_definition
 
@@ -99,6 +105,7 @@ def _rlcd_handler(
     confirm: ConfirmFn,
     print_line: PrintFn,
     credential_path: Path | None,
+    config_path: Path | None,
 ) -> SetupResult:
     from bruv.backends.registry import get_backend_definition
 
@@ -111,11 +118,61 @@ def _rlcd_handler(
     return SetupResult(backend="rlcd-modernbert", persisted=False, next_command="bruv doctor")
 
 
+def _openrouter_handler(
+    *,
+    prompt: PromptFn,
+    confirm: ConfirmFn,
+    print_line: PrintFn,
+    credential_path: Path | None,
+    config_path: Path | None,
+) -> SetupResult:
+    import os
+
+    from bruv.backends.openrouter import require_concrete_model
+    from bruv.config import update_config
+    from bruv.onboarding.credentials import OPENROUTER_API_KEY, save_openrouter_credentials
+
+    api_key = prompt("OpenRouter API key (input hidden)")
+    if not api_key.strip():
+        raise ConfigurationError(
+            message="an API key is required for the openrouter backend",
+            paid_request=False,
+            action=f"Set {OPENROUTER_API_KEY} or re-run setup with a key.",
+        )
+    model = prompt(f"OpenRouter model [{DEFAULT_OPENROUTER_MODEL}]").strip()
+    if not model:
+        model = DEFAULT_OPENROUTER_MODEL
+    try:
+        require_concrete_model(model, "model")
+    except Exception as exc:
+        raise ConfigurationError(
+            message=f"OpenRouter model {model!r} is not a concrete model.",
+            paid_request=False,
+            action="Enter a concrete OpenRouter model slug, e.g. ~typesafe/jev-latest.",
+        ) from exc
+    if confirm("Persist the key to a protected credential file?"):
+        save_openrouter_credentials(api_key, path=credential_path)
+        persisted = True
+    else:
+        print_line(
+            f"Skipping persistence. Set {OPENROUTER_API_KEY} in your shell; "
+            "the key will not be stored."
+        )
+        persisted = bool(os.environ.get(OPENROUTER_API_KEY, "").strip())
+    update_config(
+        {"backend": "openrouter", "openrouter_model": model},
+        path=config_path,
+    )
+    print_line(f"OpenRouter backend ready. Model: {model}")
+    return SetupResult(backend="openrouter", persisted=persisted, next_command="bruv doctor")
+
+
 _HANDLERS: dict[str, _BackendSetupHandler] = {
     "typesafe": _typesafe_handler,
     "simple-jev": _simple_jev_handler,
     "needle": _needle_handler,
     "rlcd-modernbert": _rlcd_handler,
+    "openrouter": _openrouter_handler,
 }
 
 
@@ -272,6 +329,7 @@ def run_setup(
                 confirm=confirm,
                 print_line=print_line,
                 credential_path=credential_path,
+                config_path=config_path,
             )
 
     print_line("bruv setup: choose a backend.")
@@ -293,6 +351,7 @@ def run_setup(
         confirm=confirm,
         print_line=print_line,
         credential_path=credential_path,
+        config_path=config_path,
     )
 
 

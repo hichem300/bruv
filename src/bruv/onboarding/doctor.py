@@ -45,6 +45,15 @@ def _check_credentials(creds: Credentials, backend: str) -> DiagnosticResult:
 
     if not get_backend_definition(backend).needs_credentials:
         return DiagnosticResult(name="credentials", ok=True, message=f"not required for {backend}")
+    if backend == "openrouter":
+        if creds.has_openrouter:
+            return DiagnosticResult(name="credentials", ok=True, message="present")
+        return DiagnosticResult(
+            name="credentials",
+            ok=False,
+            message="no OpenRouter API key found",
+            fix="Set OPENROUTER_API_KEY or run `bruv setup`.",
+        )
     if creds.has_typesafe:
         return DiagnosticResult(name="credentials", ok=True, message="present")
     return DiagnosticResult(
@@ -76,6 +85,12 @@ def _check_credential_permissions(path: Path) -> DiagnosticResult:
 def _check_endpoint(config: AppConfig) -> DiagnosticResult:
     if get_backend_definition(config.backend).runs_local:
         return DiagnosticResult(name="endpoint", ok=True, message="skipped (local runtime)")
+    if config.backend == "openrouter":
+        return DiagnosticResult(
+            name="endpoint",
+            ok=True,
+            message="using default OpenRouter Decisions endpoint",
+        )
     if config.backend == "simple-jev":
         url = str(config.simple_jev_base_url)
     elif config.typesafe_endpoint is not None:

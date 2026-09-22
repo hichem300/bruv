@@ -70,6 +70,30 @@ bruv serve simple-jev stop
 Check everything with `bruv doctor` after setup. git is required for the
 managed install.
 
+## OpenRouter backend (optional, paid)
+
+OpenRouter provides paid hosted access to TypeSafe Jev through OpenRouter's
+calibrated typed Decisions API at `POST /api/alpha/decisions`. This is a
+dedicated typed-decisions endpoint, not Chat Completions. It returns
+calibrated probabilities, so bruv reports `calibrated: true`.
+
+```bash
+bruv setup openrouter
+bruv choice "Which team?" --option sales --option billing --state "help" --backend openrouter
+```
+
+- `bruv setup openrouter` prompts for your OpenRouter key, validates it, and
+  stores it in the protected credential file (mode 0600 on POSIX, user-only
+  ACL on Windows). The key is hidden while typed and is never accepted as a
+  CLI flag or written to the config file. If secure permissions cannot be
+  applied, setup refuses persistence and recommends `OPENROUTER_API_KEY`.
+- Setup makes no paid call. There is no setup smoke test against the billing
+  API; your first real decision command is the first paid request.
+- The default model is `~typesafe/jev-latest`. Pricing per the current model
+  page: $0.042 per 1M input tokens and zero cost for output tokens.
+
+Check everything with `bruv doctor` after setup.
+
 ## Needle backend (optional)
 
 Needle runs the Needle 3 model fully on your machine. No credential needed.

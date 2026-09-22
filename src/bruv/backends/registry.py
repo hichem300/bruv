@@ -132,6 +132,45 @@ def _default_simple_jev_client(config: AppConfig) -> httpx.Client:
     )
 
 
+def _build_openrouter(context: BackendBuildContext) -> DecisionBackend:
+    from bruv.backends.openrouter import OpenRouterAdapter, require_concrete_model
+
+    if not context.credentials.has_openrouter:
+        raise ConfigurationError(
+            message="No OpenRouter API key found.",
+            paid_request=False,
+            action="Set OPENROUTER_API_KEY or run `bruv setup openrouter`.",
+        )
+    model = context.config.openrouter_model
+    if not model:
+        raise ConfigurationError(
+            message="No OpenRouter model configured.",
+            paid_request=False,
+            action="Set openrouter_model in config or run `bruv setup openrouter`.",
+        )
+    require_concrete_model(model, "config")
+    dependency = context.selected_dependency()
+    client = (
+        cast(httpx.Client, dependency)
+        if dependency is not None
+        else _default_openrouter_client(context.config)
+    )
+    return OpenRouterAdapter(
+        client=client,
+        api_key=context.credentials.openrouter_api_key,
+        model=model,
+        timeout=context.config.request_timeout_seconds,
+    )
+
+
+def _default_openrouter_client(config: AppConfig) -> httpx.Client:
+    return httpx.Client(
+        follow_redirects=False,
+        verify=True,
+        timeout=config.request_timeout_seconds,
+    )
+
+
 def _default_typesafe_client(config: AppConfig, credentials: Credentials) -> object:
     try:
         from typesafe_sdk import TypeSafeClient  # type: ignore[import-not-found]
@@ -217,6 +256,21 @@ _REGISTRY = _BackendRegistry(
             install_hint="Install RLCD support with: pip install 'bruv[rlcd-modernbert]'",
             runs_local=True,
             runtime_packages=("onnxruntime", "tokenizers", "numpy", "huggingface_hub"),
+        ),
+        BackendDefinition(
+            name="openrouter",
+            capabilities=BackendCapabilities(
+                backend="openrouter",
+                question_types=frozenset({"noul", "choice", "score"}),
+                calibrated=True,
+                allows_json_state=True,
+            ),
+            build=_build_openrouter,
+            setup_description=(
+                "hosted, paid, calibrated via OpenRouter's typed Decisions API. "
+                "Needs OPENROUTER_API_KEY."
+            ),
+            needs_credentials=True,
         ),
     )
 )

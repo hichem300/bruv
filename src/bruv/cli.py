@@ -444,9 +444,12 @@ def setup(
         raise typer.Exit(code=2)
     if not typer.confirm("Run interactive setup?", default=True):
         raise typer.Exit(code=0)
+    def _masked_prompt(text: str) -> str:
+        return typer.prompt(text, hide_input="api key" in text.lower())
+
     try:
         result = run_setup(
-            prompt=typer.prompt,
+            prompt=_masked_prompt,
             confirm=typer.confirm,
             print_line=lambda msg: typer.echo(msg),
             env={},

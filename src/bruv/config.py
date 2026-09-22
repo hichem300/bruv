@@ -32,7 +32,7 @@ class AppConfig(BaseModel):
     simple_jev_managed: bool = False
     simple_jev_device: Literal["auto", "cpu", "cuda"] = "auto"
     simple_jev_dtype: Literal["float32", "float16", "bfloat16"] = "bfloat16"
-    openrouter_model: str | None = None
+    openrouter_model: str | None = "~typesafe/jev-latest"
     openrouter_data_collection: Literal["deny", "allow"] = "deny"
     openrouter_zdr: bool = True
     needle_model: str = "Cactus-Compute/needle3"
@@ -127,6 +127,8 @@ def load_config(
 
     if "TYPESAFE_ENDPOINT" in environment:
         data["typesafe_endpoint"] = environment["TYPESAFE_ENDPOINT"]
+    if "OPENROUTER_MODEL" in environment:
+        data["openrouter_model"] = environment["OPENROUTER_MODEL"]
     if "SIMPLE_JEV_MODEL" in environment:
         data["simple_jev_model"] = environment["SIMPLE_JEV_MODEL"]
     if "SIMPLE_JEV_BASE_URL" in environment:
