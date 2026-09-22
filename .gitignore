@@ -9,6 +9,12 @@ dist/
 *.spec
 .coverage
 htmlcov/
+CLAUDE.md
+SESSION_TOKEN_WASTE.md
 .env
 *.key
 *.pem
+
+# Internal planning, design, and handoff docs (not for public repo)
+docs/superpowers/
+docs/handoff/
