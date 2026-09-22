@@ -25,6 +25,9 @@ class AppConfig(BaseModel):
     typesafe_model: str | None = "jev-latest"
     simple_jev_base_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:8000")
     simple_jev_model: str = "Qwen/Qwen3.5-0.8B"
+    openrouter_model: str | None = None
+    openrouter_data_collection: Literal["deny", "allow"] = "deny"
+    openrouter_zdr: bool = True
     needle_model: str = "Cactus-Compute/needle3"
     rlcd_model: str = "heman10x/rlcd-modernbert-151m"
     rlcd_revision: str = "8af2496eb63c7fa66d7d234e1f62629380030eb4"
@@ -39,6 +42,19 @@ class AppConfig(BaseModel):
         if value not in backend_names:
             supported = ", ".join(repr(name) for name in backend_names)
             raise ValueError(f"backend must be one of: {supported}")
+        return value
+
+    @field_validator("openrouter_model")
+    @classmethod
+    def _openrouter_model_concrete(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not value.strip():
+            raise ValueError("openrouter_model must not be blank")
+        if value != value.strip():
+            raise ValueError("openrouter_model must not have surrounding whitespace")
+        if value == "openrouter/auto":
+            raise ValueError("openrouter_model must name a concrete model, not 'openrouter/auto'")
         return value
 
     @field_validator("needle_model")

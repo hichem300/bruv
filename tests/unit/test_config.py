@@ -29,6 +29,29 @@ def test_rlcd_fields_must_be_nonblank() -> None:
         AppConfig(rlcd_revision=" ")
 
 
+def test_openrouter_privacy_defaults() -> None:
+    config = AppConfig()
+    assert config.openrouter_model is None
+    assert config.openrouter_data_collection == "deny"
+    assert config.openrouter_zdr is True
+
+
+def test_openrouter_model_accepts_concrete_slug() -> None:
+    config = AppConfig(openrouter_model="anthropic/claude-3.5-haiku")
+    assert config.openrouter_model == "anthropic/claude-3.5-haiku"
+
+
+def test_openrouter_model_rejects_blank_padded_alias() -> None:
+    with pytest.raises(ValidationError, match="openrouter_model must not be blank"):
+        AppConfig(openrouter_model="   ")
+    with pytest.raises(
+        ValidationError, match="openrouter_model must not have surrounding whitespace"
+    ):
+        AppConfig(openrouter_model=" anthropic/claude-3.5-haiku")
+    with pytest.raises(ValidationError, match="concrete model"):
+        AppConfig(openrouter_model="openrouter/auto")
+
+
 def test_file_config_sets_needle_model(tmp_path) -> None:
     cfg = tmp_path / "bruv.toml"
     write_config(cfg, 'needle_model = "custom-needle"\n')
