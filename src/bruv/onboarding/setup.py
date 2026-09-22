@@ -187,9 +187,11 @@ def _managed_simple_jev_setup(
                 client=client,
             )
             request = DecisionRequest(
-                state=None,
+                state="smoke-check",
                 questions={
-                    "smoke": NoulQuestion(instructions="Answer true.")
+                    "smoke": NoulQuestion(
+                        instructions="Answer anything; this is a smoke check."
+                    )
                 },
             )
             result = adapter.evaluate(request)
