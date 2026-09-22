@@ -20,7 +20,7 @@ from bruv.application import BackendUnavailableError, ConfigurationError
 
 REPO_ID = "heman10x/rlcd-modernbert-151m"
 REVISION = "8af2496eb63c7fa66d7d234e1f62629380030eb4"
-INSTALL_ACTION = "Install RLCD support with: pip install 'bruv[rlcd-modernbert]'"
+INSTALL_ACTION = "Install RLCD support with: pip install 'bruv[rlcd-modernbert] @ git+https://github.com/hichem300/bruv.git'"
 
 OFFLINE_ACTION = (
     "Run bruv once while online so the pinned RLCD artifacts are cached, then retry offline."

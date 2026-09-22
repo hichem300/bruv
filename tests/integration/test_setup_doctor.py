@@ -83,7 +83,7 @@ def test_setup_needle() -> None:
     assert result.persisted is False
     assert result.next_command == "bruv doctor"
     joined = "\n".join(lines)
-    assert "pip install 'bruv[needle]'" in joined
+    assert "pip install 'bruv[needle] @ git+https://github.com/hichem300/bruv.git'" in joined
     assert "35 MB" in joined
     # Needle must never ask for a credential.
     assert "API key (input hidden)" not in joined

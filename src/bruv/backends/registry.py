@@ -254,7 +254,7 @@ _REGISTRY = _BackendRegistry(
             ),
             build=_build_needle,
             setup_description="local Needle 3 inference. No key needed.",
-            install_hint="Install Needle support with: pip install 'bruv[needle]'",
+            install_hint="Install Needle support with: pip install 'bruv[needle] @ git+https://github.com/hichem300/bruv.git'",
             runs_local=True,
             optional_module="needle",
         ),
@@ -275,7 +275,7 @@ _REGISTRY = _BackendRegistry(
                 "local RLCD ModernBERT, calibrated, ~606 MB first-use HF download, "
                 "local/free inference."
             ),
-            install_hint="Install RLCD support with: pip install 'bruv[rlcd-modernbert]'",
+            install_hint="Install RLCD support with: pip install 'bruv[rlcd-modernbert] @ git+https://github.com/hichem300/bruv.git'",
             runs_local=True,
             runtime_packages=("onnxruntime", "tokenizers", "numpy", "huggingface_hub"),
         ),

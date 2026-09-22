@@ -285,7 +285,8 @@ def _check_rlcd_cache(backend: str) -> DiagnosticResult:
         message=f"unexpected RLCD cache status ({detail})",
         fix=(
             "Reinstall or update the pinned rlcd-modernbert backend with "
-            "pip install 'bruv[rlcd-modernbert]', then run one evaluation again."
+            "pip install 'bruv[rlcd-modernbert] "
+            "@ git+https://github.com/hichem300/bruv.git', then run one evaluation again."
         ),
     )
 

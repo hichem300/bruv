@@ -2,13 +2,17 @@
 
 bruv runs on Python 3.11+.
 
-## From PyPI
+## From GitHub (source)
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
-pip install bruv
+python -m pip install 'bruv @ git+https://github.com/hichem300/bruv.git'
 bruv --help
 ```
+
+> **Warning:** do not run plain `pip install bruv`. The name `bruv` on PyPI
+> resolves to an unrelated 0.0.1 package. Install from this GitHub repository
+> until an official bruv distribution is published.
 
 ## Standalone installer (no Python required)
 
@@ -112,7 +116,7 @@ Check everything with `bruv doctor` after setup.
 Needle runs the Needle 3 model fully on your machine. No credential needed.
 
 ```bash
-pip install 'bruv[needle]'
+pip install 'bruv[needle] @ git+https://github.com/hichem300/bruv.git'
 ```
 
 - First use downloads about 35 MB of model weights to your local cache.
@@ -132,7 +136,7 @@ RLCD ModernBERT runs a pinned GLiClass-ModernBERT decision model fully on
 your machine through ONNX Runtime on CPU. No credential needed.
 
 ```bash
-pip install 'bruv[rlcd-modernbert]'
+pip install 'bruv[rlcd-modernbert] @ git+https://github.com/hichem300/bruv.git'
 ```
 
 - First use downloads a ~606 MB pinned `model.onnx` plus tokenizer and

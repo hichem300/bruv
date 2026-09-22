@@ -79,7 +79,7 @@ No local runtime or key is needed if you point Simple Jev at the public
 Featherless demo endpoint:
 
 ```toml
-simple_jev_base_url = "https://simple-jev-demo-api.featherless.ai/v1/"
+simple_jev_base_url = "https://simple-jev-demo-api.featherless.ai"
 simple_jev_model = "featherless-ai/gemma-4-26B-A4B-classifier"
 ```
 
@@ -92,7 +92,7 @@ uncalibrated in all cases: bruv always reports `calibrated: false`.
 Set `backend = "needle"` in the config file or pass `--backend needle`. No
 credential or endpoint is needed: inference runs entirely on your machine.
 
-Needle requires the optional dependency (`pip install 'bruv[needle]'`). The
+Needle requires the optional dependency (`pip install 'bruv[needle] @ git+https://github.com/hichem300/bruv.git'`). The
 first run downloads about 35 MB of model weights into your local cache; after
 that everything is offline and telemetry stays disabled
 (`NEEDLE_TELEMETRY=0`).
@@ -127,7 +127,7 @@ Set `backend = "rlcd-modernbert"` in the config file or pass
 `--backend rlcd-modernbert`. No credential or endpoint is needed: inference
 runs entirely on your machine through ONNX Runtime on CPU.
 
-RLCD requires the optional dependency (`pip install 'bruv[rlcd-modernbert]'`).
+RLCD requires the optional dependency (`pip install 'bruv[rlcd-modernbert] @ git+https://github.com/hichem300/bruv.git'`).
 The first run downloads a ~606 MB pinned model artifact plus tokenizer and
 calibrator files from Hugging Face; after that runs use the local cache, and
 `HF_HUB_OFFLINE=1` works once artifacts are cached.

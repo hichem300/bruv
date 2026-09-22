@@ -128,9 +128,11 @@ bruv doctor
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
-pip install bruv
+python -m pip install 'bruv @ git+https://github.com/hichem300/bruv.git'
 
-# Simple Jev needs no key
+# Simple Jev public demo endpoint: no key, no local runtime
+export SIMPLE_JEV_BASE_URL="https://simple-jev-demo-api.featherless.ai"
+export SIMPLE_JEV_MODEL="featherless-ai/gemma-4-26B-A4B-classifier"
 bruv noul "Does this ask for a refund?" --state "I want my money back" --backend simple-jev
 
 # JSON for scripts
@@ -189,7 +191,7 @@ public Featherless demo endpoint, which needs no key but is rate limited and
 serves `featherless-ai/gemma-4-26B-A4B-classifier`:
 
 ```bash
-export SIMPLE_JEV_BASE_URL="https://simple-jev-demo-api.featherless.ai/v1/"
+export SIMPLE_JEV_BASE_URL="https://simple-jev-demo-api.featherless.ai"
 export SIMPLE_JEV_MODEL="featherless-ai/gemma-4-26B-A4B-classifier"
 ```
 
@@ -240,14 +242,14 @@ bruv demo funnel-audit --backend simple-jev --execute  # real evaluation
 - Simple Jev: local/self-hosted, explicitly uncalibrated. bruv always reports
   `calibrated: false` for Simple Jev.
 - Needle: local Needle 3 inference, no key needed. Optional extra:
-  `pip install 'bruv[needle]'`. First use downloads about 35 MB of model
+  `pip install 'bruv[needle] @ git+https://github.com/hichem300/bruv.git'`. First use downloads about 35 MB of model
   weights, then everything runs on your machine with telemetry disabled
   (`NEEDLE_TELEMETRY=0`). Needle reports confidence only; it never produces
   synthetic probabilities, and score answers carry the selected level index
   plus its legend. Supported platforms: Linux, macOS, and Windows on x86_64
   and arm64.
 - RLCD ModernBERT: local calibrated inference via ONNX Runtime on CPU, no
-  credential, optional extra: `pip install 'bruv[rlcd-modernbert]'`. First use
+  credential, optional extra: `pip install 'bruv[rlcd-modernbert] @ git+https://github.com/hichem300/bruv.git'`. First use
   downloads a ~606 MB pinned model artifact from Hugging Face, then cached
   runs need no network. Supports noul, choice, and score with calibrated
   probabilities and explicit per-question abstention. Supported platforms:

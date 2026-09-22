@@ -33,7 +33,7 @@ call may have incurred cost.
 ## Needle backend
 
 `--backend needle` runs Needle 3 inference locally. No credential needed.
-Optional dependency: `pip install 'bruv[needle]'`. First use downloads about
+Optional dependency: `pip install 'bruv[needle] @ git+https://github.com/hichem300/bruv.git'`. First use downloads about
 35 MB of model weights to your local cache; after that it runs offline with
 telemetry disabled (`NEEDLE_TELEMETRY=0`).
 
@@ -47,7 +47,7 @@ platform, and local cache without any download.
 
 `--backend rlcd-modernbert` runs a pinned GLiClass-ModernBERT decision model
 locally via ONNX Runtime on CPU. No credential needed. Optional dependency:
-`pip install 'bruv[rlcd-modernbert]'`. First use downloads a ~606 MB pinned
+`pip install 'bruv[rlcd-modernbert] @ git+https://github.com/hichem300/bruv.git'`. First use downloads a ~606 MB pinned
 model artifact plus tokenizer and calibrator files from Hugging Face; after
 that runs use the local cache, and `HF_HUB_OFFLINE=1` works once cached.
 

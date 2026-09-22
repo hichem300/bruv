@@ -25,7 +25,7 @@ from bruv.onboarding.credentials import Credentials
 
 
 def test_registry_names_and_capabilities() -> None:
-    assert backend_names == ("typesafe", "simple-jev", "needle", "rlcd-modernbert")
+    assert backend_names == ("typesafe", "simple-jev", "needle", "rlcd-modernbert", "openrouter")
     assert tuple(spec()["backends"]) == backend_names
     assert backend_capabilities("needle").backend == "needle"
     assert backend_capabilities("simple-jev").calibrated is False
@@ -165,7 +165,8 @@ def test_rlcd_registry_metadata_matches_adapter_capabilities() -> None:
         "huggingface_hub",
     )
     assert (
-        definition.install_hint == "Install RLCD support with: pip install 'bruv[rlcd-modernbert]'"
+        definition.install_hint
+        == "Install RLCD support with: pip install 'bruv[rlcd-modernbert] @ git+https://github.com/hichem300/bruv.git'"
     )
 
 

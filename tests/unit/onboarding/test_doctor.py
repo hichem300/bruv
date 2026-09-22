@@ -114,7 +114,7 @@ def test_doctor_needle_missing_dependency_reports_install_hint(monkeypatch) -> N
     )
     dep = next(r for r in results if r.name == "dependency")
     assert dep.ok is False
-    assert "pip install 'bruv[needle]'" in dep.fix
+    assert "pip install 'bruv[needle] @ git+https://github.com/hichem300/bruv.git'" in dep.fix
 
 
 def test_doctor_needle_dependency_installed(monkeypatch) -> None:

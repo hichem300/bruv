@@ -32,7 +32,7 @@ from bruv.domain.validation import BackendCapabilities
 
 _DEFAULT_MODEL = "Cactus-Compute/needle3"
 _TOOL_NAME = "select_answer"
-_INSTALL_ACTION = "Install Needle support with: pip install 'bruv[needle]'"
+_INSTALL_ACTION = "Install Needle support with: pip install 'bruv[needle] @ git+https://github.com/hichem300/bruv.git'"
 _PROVIDER_ACTION = "Clarify the state and retry, or use another backend."
 _NATIVE_RUNTIME_LOCK = RLock()
 
