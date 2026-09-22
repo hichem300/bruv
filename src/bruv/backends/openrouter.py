@@ -68,7 +68,8 @@ def require_concrete_model(model: str, source: str) -> str:
             message=f"OpenRouter model from {source} must not be blank.",
             paid_request=False,
             action=f"Set a concrete OpenRouter model in {source}, "
-            f"such as 'anthropic/claude-3.5-haiku'.",
+            f"in 'provider/model' format, such as '~typesafe/jev-latest' "
+            f"or 'anthropic/claude-3.5-haiku'.",
         )
     if stripped != model:
         raise ConfigurationError(
@@ -83,6 +84,15 @@ def require_concrete_model(model: str, source: str) -> str:
             paid_request=False,
             action=f"Set a concrete OpenRouter model in {source} instead of "
             f"'{RESERVED_ROUTER_ALIAS}'.",
+        )
+    if "/" not in model:
+        raise ConfigurationError(
+            message=f"OpenRouter model from {source} must name one concrete "
+            f"model as 'provider/model', got {model!r}.",
+            paid_request=False,
+            action=f"Enter a concrete OpenRouter model slug in 'provider/model' "
+            f"format, such as '~typesafe/jev-latest' or "
+            f"'anthropic/claude-3.5-haiku'.",
         )
     return model
 

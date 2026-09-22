@@ -445,6 +445,12 @@ def setup(
     if not typer.confirm("Run interactive setup?", default=True):
         raise typer.Exit(code=0)
     def _masked_prompt(text: str) -> str:
+        if text.startswith("OpenRouter model ["):
+            return typer.prompt(
+                "OpenRouter model",
+                default="~typesafe/jev-latest",
+                hide_input=False,
+            )
         return typer.prompt(text, hide_input="api key" in text.lower())
 
     try:
