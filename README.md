@@ -46,6 +46,10 @@ Simple Jev runs locally. `bruv setup simple-jev` installs an isolated runtime
 at `bruv/simple-jev`, auto-detects CUDA and falls back to CPU, and downloads
 the `Qwen/Qwen3.5-0.8B` model on first install.
 
+On CPU-only hosts the install picks the official CPU torch wheel directly,
+so no large CUDA package is downloaded unnecessarily. Pip runs with
+`--no-cache-dir`, so no persistent pip cache is left on disk.
+
 After setup, normal simple-jev calls auto-start and reuse the managed server.
 
 ```bash

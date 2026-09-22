@@ -49,6 +49,10 @@ bruv setup simple-jev
   written outside it.
 - Device selection is `auto`: bruv probes CUDA through the managed torch and
   falls back to CPU safely when CUDA is unusable.
+- On CPU-only hosts, install bootstraps the official CPU torch wheel
+  (`--index-url https://download.pytorch.org/whl/cpu`) so the resolver never
+  pulls a mismatched CUDA build. All pip steps use `--no-cache-dir`, so bruv
+  leaves no persistent pip cache on disk.
 - The first install downloads the default `Qwen/Qwen3.5-0.8B` model from
   Hugging Face into the managed cache. This can take several minutes.
 - After setup, normal simple-jev calls auto-start the managed server and

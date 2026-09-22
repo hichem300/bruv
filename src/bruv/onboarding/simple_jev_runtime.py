@@ -779,7 +779,10 @@ class ManagedSimpleJevRuntime:
             self._repair_clear_broken_state()
         self._ensure_source()
         venv_python = self._ensure_venv(repair=repair)
-        self._pip_install(venv_python)
+        cuda_intent = self.settings.device == "cuda" or (
+            self.settings.device == "auto" and preliminary_cuda
+        )
+        self._pip_install(venv_python, cuda_intent=cuda_intent)
         cuda_available = self._probe_cuda(venv_python)
         device = self._resolve_device(cuda_available)
         dtype = self._resolve_dtype(device)
@@ -956,9 +959,57 @@ class ManagedSimpleJevRuntime:
             )
         return venv_python
 
-    def _pip_install(self, venv_python: Path) -> None:
+    def _pip_install(self, venv_python: Path, *, cuda_intent: bool) -> None:
+        """Install the hf-server package into the managed venv.
+
+        Without CUDA intent, bootstrap a CPU-only torch wheel from the
+        pytorch CPU index first so the resolver never pulls the default
+        (often CUDA-mismatched) torch build. With CUDA intent, let pip's
+        normal resolver install torch with the rest of hf-server. All pip
+        commands run with ``--no-cache-dir`` so bruv never leaves a
+        persistent pip cache behind.
+        """
+        if cuda_intent:
+            self._run_checked(
+                [
+                    str(venv_python),
+                    "-m",
+                    "pip",
+                    "install",
+                    "--no-cache-dir",
+                    "-e",
+                    "./hf-server",
+                ],
+                cwd=self.paths.source,
+                timeout=1800.0,
+                failure_message="Could not install the Simple Jev hf-server package",
+            )
+            return
         self._run_checked(
-            [str(venv_python), "-m", "pip", "install", "-e", "./hf-server"],
+            [
+                str(venv_python),
+                "-m",
+                "pip",
+                "install",
+                "--no-cache-dir",
+                "torch>=2.6",
+                "--index-url",
+                "https://download.pytorch.org/whl/cpu",
+            ],
+            cwd=self.paths.source,
+            timeout=1800.0,
+            failure_message="Could not install the CPU-only torch bootstrap package",
+        )
+        self._run_checked(
+            [
+                str(venv_python),
+                "-m",
+                "pip",
+                "install",
+                "--no-cache-dir",
+                "-e",
+                "./hf-server",
+            ],
             cwd=self.paths.source,
             timeout=1800.0,
             failure_message="Could not install the Simple Jev hf-server package",
