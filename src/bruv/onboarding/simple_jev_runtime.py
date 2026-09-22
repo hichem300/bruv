@@ -508,6 +508,7 @@ class InstallReport:
     source_revision: str
     python_version: str
     device: str
+    dtype: str
     cuda_available: bool
     preliminary_cuda_detected: bool
     source_dir: str
@@ -781,13 +782,14 @@ class ManagedSimpleJevRuntime:
         self._pip_install(venv_python)
         cuda_available = self._probe_cuda(venv_python)
         device = self._resolve_device(cuda_available)
+        dtype = self._resolve_dtype(device)
         manifest = ManagedManifest(
             source_revision=self.settings.source_revision,
             model=self.settings.model,
             host=self.settings.host,
             port=self.settings.port,
             device=device,
-            dtype=self.settings.dtype,
+            dtype=dtype,
             context_length=self.settings.context_length,
             max_batch_size=self.settings.max_batch_size,
             max_batch_tokens=self.settings.max_batch_tokens,
@@ -803,6 +805,7 @@ class ManagedSimpleJevRuntime:
             source_revision=manifest.source_revision,
             python_version=_python_version_string(),
             device=device,
+            dtype=dtype,
             cuda_available=cuda_available,
             preliminary_cuda_detected=preliminary_cuda,
             source_dir=str(self.paths.source),
@@ -998,6 +1001,17 @@ class ManagedSimpleJevRuntime:
         if device == "auto":
             return "cuda" if cuda_available else "cpu"
         return device
+
+    def _resolve_dtype(self, device: str) -> str:
+        """Resolve the launch dtype from the resolved device.
+
+        CPU always runs ``float32`` because upstream hf-server weights do not
+        support half precision on CPU. CUDA uses the requested dtype
+        (default ``bfloat16``).
+        """
+        if device == "cpu":
+            return "float32"
+        return self.settings.dtype
 
     def _repair_clear_broken_state(self) -> None:
         """Clear malformed or dead PID state and a stale startup lock.

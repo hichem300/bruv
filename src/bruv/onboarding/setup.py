@@ -172,7 +172,7 @@ def _managed_simple_jev_setup(
             "simple_jev_model": report.model,
             "simple_jev_base_url": report.base_url,
             "simple_jev_device": report.device,
-            "simple_jev_dtype": settings.dtype,
+            "simple_jev_dtype": report.dtype,
         },
         path=config_path,
     )
@@ -227,7 +227,7 @@ def _managed_simple_jev_setup(
 
     print_line(
         f"Simple Jev ready at {outcome.base_url} "
-        f"(model {report.model}, device {report.device})."
+        f"(model {report.model}, device {report.device}, dtype {report.dtype})."
     )
     print_line("Ready: bruv doctor")
     return SetupResult(backend="simple-jev", persisted=True, next_command="bruv doctor")
