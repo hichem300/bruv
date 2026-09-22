@@ -2,6 +2,8 @@
 
 ![How bruv works](docs/assets/bruv-how-it-works.png)
 
+![bruv terminal demo](docs/assets/bruv-demo.gif)
+
 no yap, only fax. bruv gives you typed decisions (yes/no, choice, score) from
 TypeSafe Jev or Simple Jev, with one canonical contract, safe onboarding, and
 honest calibration disclosure.
