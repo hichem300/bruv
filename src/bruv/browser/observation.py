@@ -208,12 +208,27 @@ class RuntimeObservation:
     candidates: tuple[TrustedCandidate, ...]
     page_text: str
     navigation_targets: tuple[tuple[str, str], ...]
+    # Runtime-only mapping of candidate ID to the raw extraction index of its
+    # element in the page snapshot. Used by the executor to re-locate the live
+    # element after fingerprint validation. Never persisted.
+    candidate_elements: tuple[tuple[str, int], ...] = ()
 
     def target_for(self, candidate_id: str) -> str | None:
         """Return the resolved absolute URL for a navigate candidate, if any."""
         for cid, url in self.navigation_targets:
             if cid == candidate_id:
                 return url
+        return None
+
+    def raw_index_for(self, candidate_id: str) -> int | None:
+        """Return the raw extraction index for a candidate, if any.
+
+        Synthetic candidates (scroll/wait) have no backing element and
+        therefore no raw index.
+        """
+        for cid, raw_index in self.candidate_elements:
+            if cid == candidate_id:
+                return raw_index
         return None
 
 
@@ -351,6 +366,7 @@ class ObservationBuilder:
         fingerprints: list[ElementFingerprint] = []
         candidates: list[TrustedCandidate] = []
         navigation_targets: list[tuple[str, str]] = []
+        candidate_elements: list[tuple[str, int]] = []
         seen_fingerprints: set[str] = set()
 
         for position, item in enumerate(kept):
@@ -359,6 +375,7 @@ class ObservationBuilder:
             candidate_id = f"c{position:04d}"
             candidate = self._candidate(item, candidate_id, fingerprint, password_present)
             candidates.append(candidate)
+            candidate_elements.append((candidate_id, item.raw.index))
             if item.kind_class == "link":
                 navigation_targets.append((candidate_id, item.resolved_href or ""))
 
@@ -379,6 +396,7 @@ class ObservationBuilder:
             candidates=tuple(candidates),
             page_text=bounded_page_text,
             navigation_targets=tuple(navigation_targets),
+            candidate_elements=tuple(candidate_elements),
         )
 
     def _filter_and_rank(

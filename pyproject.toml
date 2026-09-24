@@ -19,6 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+browser = ["playwright>=1.49,<2"]
 needle = ["cactus-needle>=3.0,<4"]
 rlcd-modernbert = [
   "numpy>=1.26,<3",

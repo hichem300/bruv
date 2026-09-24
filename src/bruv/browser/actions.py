@@ -32,6 +32,9 @@ class TypeAction(CanonicalModel):
 
 class NavigateAction(CanonicalModel):
     kind: Literal["navigate"] = "navigate"
+    candidate_id: NonBlankString = Field(max_length=64)
+    # Trusted internal target resolved from a runtime observation. Never
+    # supplied by the model; validated against navigation_targets at execution.
     url: NonBlankString = Field(max_length=2048)
 
     @field_validator("url")
