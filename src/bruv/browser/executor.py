@@ -278,6 +278,14 @@ class BrowserExecutor:
 
     # -- observation -----------------------------------------------------------
 
+    @property
+    def session_artifacts(self) -> SessionArtifacts | None:
+        """Declared artifact paths for this session, if ``start()`` prepared them.
+
+        Safe metadata (paths only); None before start or when preparation failed.
+        """
+        return self._session_artifacts
+
     def observe(self) -> RuntimeObservation:
         """Re-observe the live page and return the bounded runtime observation."""
         self._ensure_usable()

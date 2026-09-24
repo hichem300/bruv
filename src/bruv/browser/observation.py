@@ -69,6 +69,12 @@ _FINGERPRINT_ATTRIBUTES: Final[frozenset[str]] = frozenset(
     {"id", "name", "aria-label", "download", "target", "formaction", "list"}
 )
 
+# Stable synthetic candidate IDs for scroll/wait; exported so callers never
+# hard-code magic IDs. Positions are fixed by the bounded specs below.
+SCROLL_DOWN_CANDIDATE_ID: Final[str] = "s0000"
+SCROLL_UP_CANDIDATE_ID: Final[str] = "s0001"
+WAIT_CANDIDATE_ID: Final[str] = "s0002"
+
 # Deterministic priority classes; lower sorts first, then original index.
 _PRIORITY_EDITABLE: Final[int] = 0
 _PRIORITY_CONTROL: Final[int] = 1
@@ -563,17 +569,17 @@ def _synthetic_fingerprint(fingerprint_id: str, tag: str) -> ElementFingerprint:
 def _synthetic_candidates() -> list[TrustedCandidate]:
     """Bounded scroll and wait candidates. Goal completion is Noul; no finish."""
     specs: list[tuple[str, str, str]] = [
-        ("scroll-down", "synthetic", "scroll down the page"),
-        ("scroll-up", "synthetic", "scroll up the page"),
-        ("wait", "synthetic", "wait briefly for the page to settle"),
+        ("scroll-down", SCROLL_DOWN_CANDIDATE_ID, "scroll down the page"),
+        ("scroll-up", SCROLL_UP_CANDIDATE_ID, "scroll up the page"),
+        ("wait", WAIT_CANDIDATE_ID, "wait briefly for the page to settle"),
     ]
     candidates: list[TrustedCandidate] = []
-    for offset, (name, tag, description) in enumerate(specs):
+    for name, candidate_id, description in specs:
         candidates.append(
             TrustedCandidate(
-                candidate_id=f"s{offset:04d}",
+                candidate_id=candidate_id,
                 kind="scroll" if name.startswith("scroll") else "wait",
-                fingerprint=_synthetic_fingerprint(f"syn-{name}", tag),
+                fingerprint=_synthetic_fingerprint(f"syn-{name}", "synthetic"),
                 description=description,
                 needs_review_kind=None,
             )
@@ -582,6 +588,9 @@ def _synthetic_candidates() -> list[TrustedCandidate]:
 
 
 __all__ = [
+    "SCROLL_DOWN_CANDIDATE_ID",
+    "SCROLL_UP_CANDIDATE_ID",
+    "WAIT_CANDIDATE_ID",
     "ObservationBuilder",
     "RawDomElement",
     "RuntimeObservation",
