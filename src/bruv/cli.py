@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from bruv.application import ApplicationError, DecisionFacade
 from bruv.backends.factory import backend_capabilities, create_backend
+from bruv.cli_browser import browser_app, run_browser_setup
 from bruv.command_builders import (
     build_single_question_request,
     load_eval_request,
@@ -431,8 +432,11 @@ def setup(
         bool, typer.Option("--repair", help="Repair the managed Simple Jev install.")
     ] = False,
 ) -> None:
-    """Guided credential and backend setup (interactive only)."""
+    """Guided credential and backend setup; `setup browser` is non-interactive."""
     import sys
+
+    if backend == "browser":
+        run_browser_setup()
 
     if not sys.stdin.isatty():
         typer.echo(
@@ -444,6 +448,7 @@ def setup(
         raise typer.Exit(code=2)
     if not typer.confirm("Run interactive setup?", default=True):
         raise typer.Exit(code=0)
+
     def _masked_prompt(text: str) -> str:
         if text.startswith("OpenRouter model ["):
             return typer.prompt(
@@ -471,6 +476,7 @@ def setup(
 
 serve_app = typer.Typer(help="Manage the local Simple Jev server.")
 app.add_typer(serve_app, name="serve")
+app.add_typer(browser_app, name="browser")
 
 
 @serve_app.command("simple-jev")
@@ -487,9 +493,7 @@ def serve_simple_jev(
     )
 
     if action not in ("status", "start", "stop"):
-        typer.echo(
-            f"error: unsupported action {action!r}; use status, start, or stop", err=True
-        )
+        typer.echo(f"error: unsupported action {action!r}; use status, start, or stop", err=True)
         raise typer.Exit(code=2)
 
     def _serve_error(error: ApplicationError) -> typer.Exit:
@@ -555,9 +559,15 @@ def serve_simple_jev(
 @app.command()
 def doctor(
     check_freshness: Annotated[bool, typer.Option("--check-freshness")] = False,
+    browser: Annotated[
+        bool,
+        typer.Option(
+            "--browser", help="Also check Playwright and a safe headless Chromium launch."
+        ),
+    ] = False,
 ) -> None:
     """Run non-paid diagnostics and print fixes for failed items."""
-    results = run_doctor(check_freshness=check_freshness)
+    results = run_doctor(check_freshness=check_freshness, check_browser=browser)
     any_failed = False
     for item in results:
         status = "ok" if item.ok else "FAIL"

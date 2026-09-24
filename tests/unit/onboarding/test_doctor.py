@@ -201,6 +201,97 @@ def test_doctor_needle_cache_parent_unwritable(monkeypatch, tmp_path) -> None:
     assert cache.ok is False
 
 
+# --- Browser diagnostics ---
+
+
+def _failing_browser_probe() -> bool:
+    raise AssertionError("browser probe must not run when not requested")
+
+
+def test_doctor_default_does_not_probe_browser() -> None:
+    results = run_doctor(
+        config=_config(),
+        credentials=Credentials(),
+        network_probe=lambda url: False,
+        browser_probe=_failing_browser_probe,
+    )
+    assert all(r.name != "browser" for r in results)
+
+
+def _browser_results(probe) -> list:
+    return run_doctor(
+        config=_config(),
+        credentials=Credentials(),
+        network_probe=lambda url: False,
+        check_browser=True,
+        browser_probe=probe,
+    )
+
+
+def test_doctor_check_browser_true_result(monkeypatch) -> None:
+    import bruv.onboarding.doctor as doctor_module
+
+    launched = []
+
+    def probe() -> bool:
+        launched.append(True)
+        return True
+
+    monkeypatch.setattr(
+        doctor_module.importlib.util,
+        "find_spec",
+        lambda name: object() if name == "playwright" else None,
+    )
+    results = _browser_results(probe)
+    browser = [r for r in results if r.name == "browser"]
+    assert len(browser) == 1
+    item = browser[0]
+    assert item.ok is True
+    assert "launched" in item.message
+    assert launched == [True]
+
+
+def test_doctor_check_browser_false_result_has_exact_fix(monkeypatch) -> None:
+    import bruv.onboarding.doctor as doctor_module
+
+    monkeypatch.setattr(
+        doctor_module.importlib.util,
+        "find_spec",
+        lambda name: object() if name == "playwright" else None,
+    )
+    results = _browser_results(lambda: False)
+    item = next(r for r in results if r.name == "browser")
+    assert item.ok is False
+    assert item.fix == "Install bruv[browser], then run `bruv setup browser`."
+
+
+def test_doctor_check_browser_raising_probe_reported_false(monkeypatch) -> None:
+    import bruv.onboarding.doctor as doctor_module
+
+    monkeypatch.setattr(
+        doctor_module.importlib.util,
+        "find_spec",
+        lambda name: object() if name == "playwright" else None,
+    )
+
+    def probe() -> bool:
+        raise RuntimeError("headless launch boom")
+
+    results = _browser_results(probe)
+    item = next(r for r in results if r.name == "browser")
+    assert item.ok is False
+    assert item.fix == "Install bruv[browser], then run `bruv setup browser`."
+
+
+def test_doctor_browser_package_missing_skips_probe(monkeypatch) -> None:
+    monkeypatch.setattr("bruv.onboarding.doctor.importlib.util.find_spec", lambda name: None)
+    results = _browser_results(_failing_browser_probe)
+    item = next(r for r in results if r.name == "browser")
+    assert item.ok is False
+    assert "playwright package is not installed" in item.message
+    assert item.fix == "Install bruv[browser], then run `bruv setup browser`."
+
+
 def test_doctor_needle_no_runtime_construction(monkeypatch) -> None:
     """Doctor must not construct the Needle runtime or import the package."""
     from bruv.backends import needle as needle_module

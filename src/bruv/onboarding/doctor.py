@@ -10,6 +10,7 @@ import importlib.util
 import os
 import platform
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from bruv.domain.validation import BackendCapabilities
 from bruv.onboarding.credentials import Credentials, credentials_path, load_credentials
 
 NetworkProbe = Callable[[str], bool]
+BrowserProbe = Callable[[], bool]
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,6 +293,50 @@ def _check_rlcd_cache(backend: str) -> DiagnosticResult:
     )
 
 
+def _default_browser_probe() -> bool:
+    """Safe headless Chromium launch/close. No URL, no network, no paid calls."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False
+    playwright = None
+    try:
+        playwright = sync_playwright().start()
+        browser = playwright.chromium.launch(headless=True)
+        browser.close()
+        return True
+    except Exception:  # noqa: BLE001 - probe only; never surface driver details
+        return False
+    finally:
+        if playwright is not None:
+            with suppress(Exception):
+                playwright.stop()
+
+
+def _check_browser(probe: BrowserProbe) -> DiagnosticResult:
+    if importlib.util.find_spec("playwright") is None:
+        return DiagnosticResult(
+            name="browser",
+            ok=False,
+            message="playwright package is not installed",
+            fix="Install bruv[browser], then run `bruv setup browser`.",
+        )
+    try:
+        ok = probe()
+    except Exception:  # noqa: BLE001
+        ok = False
+    if ok:
+        return DiagnosticResult(
+            name="browser", ok=True, message="headless chromium launched and closed"
+        )
+    return DiagnosticResult(
+        name="browser",
+        ok=False,
+        message="headless chromium could not be launched",
+        fix="Install bruv[browser], then run `bruv setup browser`.",
+    )
+
+
 def _check_version_freshness(*, enabled: bool) -> DiagnosticResult:
     if not enabled:
         return DiagnosticResult(
@@ -306,6 +352,8 @@ def run_doctor(
     credential_file: Path | None = None,
     network_probe: NetworkProbe | None = None,
     check_freshness: bool = False,
+    check_browser: bool = False,
+    browser_probe: BrowserProbe | None = None,
 ) -> list[DiagnosticResult]:
     """Run all diagnostics without any paid inference."""
     cfg = config if config is not None else load_config(env={})
@@ -326,6 +374,11 @@ def run_doctor(
         _check_rlcd_cache(cfg.backend),
         _check_capabilities(backend_capabilities(cfg.backend)),
     ]
+    if check_browser:
+        selected_browser_probe = (
+            browser_probe if browser_probe is not None else _default_browser_probe
+        )
+        results.append(_check_browser(selected_browser_probe))
     if check_freshness:
         results.append(_check_version_freshness(enabled=True))
     return results
