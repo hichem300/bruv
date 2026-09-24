@@ -11,6 +11,7 @@ import httpx
 from bruv.application import ConfigurationError
 from bruv.backends.interface import DecisionBackend
 from bruv.config import AppConfig
+from bruv.domain.questions import ChoiceQuestion
 from bruv.domain.validation import BackendCapabilities
 from bruv.onboarding.credentials import Credentials
 
@@ -312,11 +313,71 @@ def create_registered_backend(context: BackendBuildContext) -> DecisionBackend:
     return get_backend_definition(context.config.backend).build(context)
 
 
+# --- Browser compatibility, derived from existing capabilities only. ---
+
+
+def _choice_option_bounds() -> tuple[int, int]:
+    """Read ChoiceQuestion criteria bounds from the canonical model itself."""
+    minimum, maximum = 2, 50
+    for item in ChoiceQuestion.model_fields["criteria"].metadata:
+        min_length = getattr(item, "min_length", None)
+        max_length = getattr(item, "max_length", None)
+        if isinstance(min_length, int):
+            minimum = min_length
+        if isinstance(max_length, int):
+            maximum = max_length
+    return minimum, maximum
+
+
+def browser_supports_noul_choice(capabilities: BackendCapabilities) -> bool:
+    """A backend is browser-compatible when it answers canonical noul and choice."""
+    return {"noul", "choice"} <= capabilities.question_types
+
+
+def browser_compatible_backends() -> tuple[str, ...]:
+    """Names of registered backends the browser can drive, registry order."""
+    return tuple(
+        name
+        for name in backend_names
+        if browser_supports_noul_choice(get_backend_definition(name).capabilities)
+    )
+
+
+def browser_choice_batch_sizes(capabilities: BackendCapabilities) -> tuple[int, ...]:
+    """Valid candidate batch sizes for one Choice call on this backend.
+
+    Batch size k produces k candidate options plus one abstain option when the
+    backend declares ``explicit_abstention``; the total must stay within the
+    canonical ChoiceQuestion bounds. ``explicit_abstention`` shifts the total
+    but never makes a one-criterion question valid: criteria counts remain the
+    canonical 2..50. When ``supported_total_candidates`` is set (RLCD
+    ModernBERT's per_k calibration contract), only criteria counts whose
+    total (k + abstain offset) is supported are allowed. Unsupported candidate
+    totals are simply absent from the result:
+    callers must reject them, never fall back to a global temperature.
+    """
+    abstain = 1 if capabilities.explicit_abstention else 0
+    minimum, maximum = _choice_option_bounds()
+    sizes: list[int] = []
+    for criteria in range(minimum, maximum + 1):
+        total = criteria + abstain
+        if (
+            capabilities.supported_total_candidates is not None
+            and total not in capabilities.supported_total_candidates
+        ):
+            continue
+        sizes.append(criteria)
+    return tuple(sizes)
+
+
 __all__ = [
     "BackendBuildContext",
     "BackendDefinition",
     "backend_capabilities",
     "backend_names",
+    "browser_choice_batch_sizes",
+    "browser_compatible_backends",
+    "browser_supports_noul_choice",
     "create_registered_backend",
     "get_backend_definition",
 ]

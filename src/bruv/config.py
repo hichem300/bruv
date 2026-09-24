@@ -10,6 +10,7 @@ import tomllib
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import platformdirs
 from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
@@ -17,6 +18,32 @@ from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_valida
 from bruv.application import ConfigurationError
 
 BackendName = str
+
+
+def _canonical_origin(origin: str) -> str:
+    """Validate a strict HTTP(S) origin and return its canonical form."""
+    parts = urlsplit(origin)
+    if parts.scheme not in ("http", "https"):
+        raise ValueError(f"browser origin {origin!r} must use http:// or https://")
+    if not parts.netloc:
+        raise ValueError(f"browser origin {origin!r} must include a host")
+    if parts.username is not None or parts.password is not None:
+        raise ValueError(f"browser origin {origin!r} must not contain credentials")
+    if parts.path not in ("", "/") or parts.query or parts.fragment:
+        raise ValueError(
+            f"browser origin {origin!r} must be a bare origin with no path, query, or fragment"
+        )
+    try:
+        host = parts.hostname
+        port = parts.port
+    except ValueError as exc:
+        raise ValueError(f"browser origin {origin!r} has an invalid host or port") from exc
+    if not host:
+        raise ValueError(f"browser origin {origin!r} must include a host")
+    authority = f"[{host}]" if ":" in host else host
+    if port is not None:
+        authority = f"{authority}:{port}"
+    return f"{parts.scheme}://{authority}"
 
 
 class AppConfig(BaseModel):
@@ -40,6 +67,29 @@ class AppConfig(BaseModel):
     rlcd_revision: str = "8af2496eb63c7fa66d7d234e1f62629380030eb4"
     request_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
     output: Literal["human", "json"] = "human"
+    # Browser feature. Allowed origins are the only navigable origins; the
+    # allowlist governs top-level navigations only, not page subresources.
+    browser_allowed_origins: tuple[str, ...] = ()
+    browser_max_steps: int = Field(default=25, ge=1, le=500)
+    browser_time_limit_seconds: float = Field(default=600.0, gt=0, le=86_400)
+    browser_headless: bool = True
+    browser_observation_max_elements: int = Field(default=60, ge=1, le=500)
+    browser_page_text_max_chars: int = Field(default=6_000, ge=100, le=200_000)
+    browser_capture_trace: bool = False
+    browser_capture_video: bool = False
+    browser_artifact_dir: Path | None = None
+
+    @field_validator("browser_allowed_origins")
+    @classmethod
+    def _normalized_origins(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        normalized: list[str] = []
+        for origin in value:
+            if origin != origin.strip() or not origin.strip():
+                raise ValueError("browser origins must be nonblank without surrounding whitespace")
+            normalized.append(_canonical_origin(origin))
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("browser origins must not contain duplicates")
+        return tuple(normalized)
 
     @field_validator("backend")
     @classmethod
@@ -81,6 +131,11 @@ class AppConfig(BaseModel):
 
 def config_dir() -> Path:
     return Path(platformdirs.user_config_dir("bruv", appauthor=False))
+
+
+def default_browser_artifact_dir() -> Path:
+    """Default artifact location for browser sessions under user data."""
+    return Path(platformdirs.user_data_dir("bruv", appauthor=False)) / "browser" / "artifacts"
 
 
 def config_path() -> Path:
@@ -161,6 +216,8 @@ def _toml_value(value: object) -> str:
         if not math.isfinite(value):
             raise ValueError(f"cannot serialize non-finite float: {value!r}")
         return repr(value)
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(_toml_value(item) for item in value) + "]"
     # AnyHttpUrl and similar pydantic URL types stringify cleanly.
     return json.dumps(str(value))
 
@@ -204,7 +261,7 @@ def update_config(
         ) from exc
 
     lines: list[str] = []
-    for name, field in known_fields.items():
+    for name, _field in known_fields.items():
         value = getattr(config, name)
         if value is None:
             continue
@@ -213,9 +270,7 @@ def update_config(
 
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(
-            dir=target.parent, prefix=".bruv.toml.", suffix=".tmp"
-        )
+        fd, tmp_name = tempfile.mkstemp(dir=target.parent, prefix=".bruv.toml.", suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 handle.write(payload)
@@ -240,9 +295,7 @@ def update_config(
         except (OSError, AttributeError):
             pass
     except OSError as exc:
-        raise _fail(
-            "Check directory permissions and free disk space, then retry.", exc
-        ) from exc
+        raise _fail("Check directory permissions and free disk space, then retry.", exc) from exc
 
     return config
 
@@ -252,6 +305,7 @@ __all__ = [
     "BackendName",
     "config_dir",
     "config_path",
+    "default_browser_artifact_dir",
     "load_config",
     "update_config",
 ]
