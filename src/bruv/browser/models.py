@@ -135,14 +135,44 @@ class SessionState(CanonicalModel):
 
 
 def assert_no_supplied_text(state: SessionState, supplied_texts: tuple[str, ...]) -> None:
-    """Guardrail helper: supplied text must not be present in the persisted model.
+    """Guardrail helper: supplied text must not be persisted in the model.
 
-    This is a defensive check for session persistence call sites; the models
-    above simply have no fields that could carry supplied text.
+    Structural safeguard: these models simply have no fields that could carry
+    supplied text, so any leak would require a new text-bearing field. This
+    helper is a defensive second layer over that structural guarantee.
+
+    Conservative heuristic, applied recursively to serialized *string values*
+    only (never JSON keys, so short words like ``goal`` or ``goal_ref`` cannot
+    collide with field names):
+
+    - any nonempty supplied string that exactly equals a serialized string
+      value is rejected, regardless of length;
+    - substring containment is rejected only for supplied strings of length
+      >= 8, balancing leak detection against false positives for common short
+      words inside safe refs and URLs.
+
+    Error messages never include the supplied text itself.
     """
-    payload = state.model_dump_json()
+
+    def _collect_strings(value: object) -> None:
+        if isinstance(value, str):
+            strings.append(value)
+        elif isinstance(value, dict):
+            for item in value.values():
+                _collect_strings(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                _collect_strings(item)
+
+    strings: list[str] = []
+    _collect_strings(state.model_dump(mode="json"))
     for text in supplied_texts:
-        if text and text in payload:
+        if not text:
+            continue
+        if len(text) < 8:
+            if any(value == text for value in strings):
+                raise ValueError("supplied text must never be persisted in session models")
+        elif any(text in value for value in strings):
             raise ValueError("supplied text must never be persisted in session models")
 
 
