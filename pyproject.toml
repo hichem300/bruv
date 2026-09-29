@@ -23,7 +23,7 @@ browser = ["playwright>=1.49,<2"]
 needle = ["cactus-needle>=3.0,<4"]
 rlcd-modernbert = [
   "numpy>=1.26,<3",
-  "onnxruntime>=1.17,<2",
+  "onnxruntime>=1.30.0,<2",
   "tokenizers>=0.19,<1",
   "huggingface_hub>=1.32.0,<2",
 ]
